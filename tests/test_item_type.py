@@ -3,10 +3,10 @@
 import unittest
 import logging  # noqa
 
-from nn_extractor import constants  # noqa
+from nn_extractor import item_type  # noqa
 
 
-class TestConstants(unittest.TestCase):
+class TestItemType(unittest.TestCase):
 
     def setUp(self):
         pass

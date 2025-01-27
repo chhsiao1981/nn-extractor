@@ -8,7 +8,14 @@ build-backend = 'setuptools.build_meta'
 name = 'nn-extractor'
 version = '0.0.1'
 dependencies = [
+    'torch==2.5.1',
+    'numpy==2.0.2',
+    'PyYAML==6.0.2',
+    'protobuf==5.29.3',
+    'pyarrow==19.0.0',
+    'nnunetv2 @ git+ssh://git@github.com/MIC-DKFZ/nnUNet#v2.5.1',
 ]
+
 authors = [
     # {name = '', email = ''},
 ]
@@ -18,9 +25,16 @@ license = {file = 'LICENSE.txt'}
 keywords = [
 ]
 classifiers = [
+    'License :: OSI Approved :: BSD License',
     'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
     'Operating System :: OS Independent',
 ]
+requires-python = ">= 3.10"
 
 [project.urls]
 # Homepage      = ''
@@ -30,8 +44,34 @@ classifiers = [
 # Changelog = ''
 
 [project.scripts]
+nnunet-extractor = 'nn_extractor.cmds.nnunetextractor:main'
 
 [tool.setuptools.packages.find]
 exclude = [
     'tests*',
+]
+
+[tool.pytest.ini_options]
+log_cli         = true
+log_cli_level   = "DEBUG"
+log_format      = "%(asctime)s [%(levelname)-5.5s] %(module)s#%(funcName)s@%(lineno)d: %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = [
+    # See https://github.com/PyCQA/pycodestyle/issues/373
+    'E203',
+]
+exclude = [
+    '.git',
+    '__pycache__',
+    '__init__.py',
+    '.cc',
+    '.github',
+    '.pytest_cache',
+    '.vscode',
+    'nnextractor_pb2.py',
+    'build',
+    'dist',
 ]

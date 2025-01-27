@@ -1,0 +1,48 @@
+[nn-extractor]
+name       = 'test'
+output_dir = './'
+
+is_disable      = false
+is_debug_config = false
+
+is_nnnode_record_inputs = true
+
+is_profile = false
+
+[loggers]
+keys = 'root, nn_extractor'
+
+disable_existing_loggers = true
+
+[handlers]
+keys = 'console'
+
+[formatters]
+keys = 'generic'
+
+[logger_root]
+level    = 'WARNING'
+handlers = 'console'
+
+[logger_nn_extractor]
+level     = 'DEBUG'
+qualname  = 'nn-extractor'
+handlers  = 'console'
+propagate = 0
+
+[handler_console]
+class     = 'StreamHandler'
+args      = '(sys.stderr,)'
+level     = 'NOTSET'
+formatter = 'generic'
+
+# following toml format about single-quotes in args
+[handler_file]
+class     = 'FileHandler'
+args      = '''('python.log', 'w')'''
+level     = 'NOTSET'
+formatter = 'generic'
+
+[formatter_generic]
+format  = '%(asctime)s [%(levelname)-5.5s] %(module)s#%(funcName)s@%(lineno)d: %(message)s'
+datefmt = '%Y-%m-%d %H:%M:%S'

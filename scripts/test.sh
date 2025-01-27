@@ -1,4 +1,4 @@
 #!/bin/bash
 
-pytest -W ignore::DeprecationWarning
+pytest -W ignore::DeprecationWarning -vv
 

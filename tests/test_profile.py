@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-import logging
 
-from nn_extractor import activations
+from nn_extractor import profile  # noqa
 
 
-class TestActivations(unittest.TestCase):
+class TestProfile(unittest.TestCase):
 
     def setUp(self):
         pass

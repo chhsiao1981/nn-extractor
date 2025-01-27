@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-import logging  # noqa
 
-from nn_extractor import constants  # noqa
+from nn_extractor import sequence  # noqa
 
 
-class TestConstants(unittest.TestCase):
+class TestSequence(unittest.TestCase):
 
     def setUp(self):
         pass

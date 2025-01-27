@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-import logging
+import logging  # noqa
 
-from nn_extractor import hook
+from nn_extractor import _cfg  # noqa
 
 
-class TestHook(unittest.TestCase):
+class TestCfg(unittest.TestCase):
 
     def setUp(self):
         pass
