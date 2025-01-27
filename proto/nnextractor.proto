@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package nnextractor;
+
+message NDArray {
+  string type = 1;
+  repeated bool bools = 2;
+  repeated int32 int32s = 3;
+  repeated int64 int64s = 4;
+  repeated float float32s = 5;
+  repeated double float64s = 6;
+  repeated NDArray lists = 7;
+}
+
+message Record {
+  string type = 1;
+  optional NDArray array = 2;
+  repeated Record records = 3;
+  map<string, Record> the_map = 4;
+}
+
+message Parameter {
+  string name = 1;
+  Record record = 2;
+}
+
+message Activation {
+  string name = 1;
+  Record input = 2;
+  repeated Parameter params = 3;
+  Record output = 4;
+}
+
+message Activations { repeated Activation activations = 1; }
