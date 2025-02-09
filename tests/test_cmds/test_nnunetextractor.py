@@ -3,10 +3,10 @@
 import unittest
 import logging  # noqa
 
-from nn_extractor import constants  # noqa
+from nn_extractor.cmds import nnunetextractor  # noqa
 
 
-class TestConstants(unittest.TestCase):
+class TestNnunetextractor(unittest.TestCase):
 
     def setUp(self):
         pass

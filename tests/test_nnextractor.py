@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-import logging
+import logging  # noqa
 
-from nn_extractor import save_file
+from nn_extractor import nnextractor  # noqa
 
 
-class TestSaveFile(unittest.TestCase):
+class TestNNExtractor(unittest.TestCase):
 
     def setUp(self):
         pass

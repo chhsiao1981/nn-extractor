@@ -2,33 +2,265 @@ syntax = "proto3";
 
 package nnextractor;
 
+enum NDArrayType {
+  NDA_UNSPECIFIED = 0;
+
+  NDA_BOOL = 1;
+  NDA_INT8 = 2;
+  NDA_INT16 = 3;
+  NDA_INT32 = 4;
+  NDA_INT64 = 5;
+  NDA_FLOAT32 = 6;
+  NDA_FLOAT64 = 7;
+  NDA_FLOAT16 = 8;
+
+  NDA_UINT8 = 9;
+  NDA_UINT16 = 10;
+  NDA_UINT32 = 11;
+  NDA_UINT64 = 12;
+}
+
+// np.ndarray
 message NDArray {
-  string type = 1;
-  repeated bool bools = 2;
-  repeated int32 int32s = 3;
-  repeated int64 int64s = 4;
-  repeated float float32s = 5;
-  repeated double float64s = 6;
-  repeated NDArray lists = 7;
+  repeated sint32 shape = 1;
+
+  bytes the_bytes = 2;
 }
 
-message Record {
-  string type = 1;
-  optional NDArray array = 2;
-  repeated Record records = 3;
-  map<string, Record> the_map = 4;
+enum PrimitiveType {
+  P_UNSPECIFIED = 0;
+
+  P_NULL = 1;
+
+  P_LIST = 2;
+  P_DICT = 3;
+
+  P_BOOL = 4;
+  P_STR = 5;
+  P_F64 = 6;
+  P_F32 = 7;
+  P_I64 = 8;
+  P_I32 = 9;
+  P_NDARRAY = 10;
 }
 
-message Parameter {
+// Primitive is used for information not in the nn.
+// Used in inputs, preprocess, postprocess, and outputs.
+//
+// The main difference between Primitive and NNRecord
+// is that Primitive can be scalar values or string,
+// while the most basic unit of NNRecord is NDArray.
+message Primitive {
+  PrimitiveType the_type = 1;
+  optional bool b = 2;
+  optional string s = 3;
+  optional double f64 = 4;
+  optional float f32 = 5;
+  optional sint64 i64 = 6;
+  optional sint32 i32 = 7;
+  optional NDArray ndarray = 8;
+
+  repeated Primitive lists = 9;
+
+  map<string, Primitive> the_map = 10;
+}
+
+// Item Type
+//
+// The type of the item.
+// Item is presented as either single item,
+// [same-kind] (list of same-kind items),
+// or map<str, same-kind> (dictionary of same-kind items).
+enum ItemType {
+  I_UNSPECIFIED = 0;
+
+  // I don't know the type,
+  // or the types are complicated and I don't want to specify the type.
+  // I'll just say it is a raw type.
+  // Let the renderer does whatever it wants.
+  // (Usually the renderer just presents the data as ndarray)
+  I_RAW = 1;
+
+  // I know the type,
+  // but it is not listed in the following settings.
+  I_OTHER = 2;
+
+  // ndarray
+  // Usually present the ndarray as:
+  // * 1D: numbers
+  // * 2D: image
+  // * 3D: 3D-nii
+  // * > 3D: have users select 3 dimenions and present as 3D nii,
+  //         and show the corresponding info in other dims.
+  I_NDARRAY = 3;
+
+  // 3D-nii
+  I_NII = 4;
+
+  // 2D-image
+  I_IMAGE = 5;
+
+  // audio (can be presented as sound, or time-domain presentation)
+  I_AUDIO = 6;
+
+  // spectrogram
+  I_SPECTROGRAM = 7;
+
+  // text
+  I_TEXT = 8;
+
+  // number
+  I_NUMBER = 9;
+
+  // text or number
+  I_TEXT_NUMBER = 10;
+
+  // null
+  I_NULL = 11;
+}
+
+message Item {
+  // name
   string name = 1;
-  Record record = 2;
+
+  // type
+  ItemType the_type = 2;
+
+  // other type
+  optional string other_type = 3;
+
+  Primitive item = 4;
 }
 
-message Activation {
+message Items {
   string name = 1;
-  Record input = 2;
-  repeated Parameter params = 3;
-  Record output = 4;
+  repeated Item items = 2;
 }
 
-message Activations { repeated Activation activations = 1; }
+enum NNRecordType {
+  NNR_UNSPECIFIED = 0;
+
+  // np.ndarray
+  NNR_ARRAY = 1;
+
+  // list / tuple
+  NNR_LIST = 3;
+
+  // dictionary / map for np.ndarray
+  NNR_DICT = 4;
+}
+
+// NNRecord
+//
+// The very fundamental object representing record using np.ndarray,
+// NNRecord[], or {key: NNRecord}.
+message NNRecord {
+  // name of the record
+  // optionally already named in the parent class. (NNNode or Parameter)
+  optional string name = 1;
+
+  NNRecordType the_type = 2;
+
+  // np.ndarray
+  optional NDArray ndarray = 3;
+
+  // NNRecord[]
+  repeated NNRecord records = 4;
+
+  // {key: NNRecord}
+  map<string, NNRecord> the_map = 5;
+}
+
+// NNParameter
+message NNParameter {
+  // parameter name
+  string name = 1;
+
+  // nn-record
+  NNRecord record = 2;
+}
+
+// NNNode
+//
+// The nn-node represents the following computation:
+//
+//   activation = f(input_0, input_1, ...)
+//
+// The procedure of each nn-node is as follow:
+//   1. taking inputs
+//   2. processing with internal parameters.
+//   3. producing 1 activation.
+//   4. output to the children.
+message NNNode {
+  // name
+  string name = 1;
+
+  // input
+  repeated NNRecord inputs = 2;
+
+  // parameters
+  repeated NNParameter params = 3;
+
+  // activation
+  optional NNRecord activation = 4;
+
+  repeated NNRecord gradient_inputs = 5;
+
+  repeated NNParameter gradient_params = 6;
+
+  repeated NNRecord gradients = 7;
+
+  // the following activation nodes
+  repeated NNNode children = 8;
+}
+
+enum SequenceType {
+  S_UNSPECIFIED = 0;
+
+  S_INPUTS = 1;
+
+  S_PREPROCESS = 2;
+
+  S_FORWARD = 3;
+
+  S_BACKWARD = 4;
+
+  S_POSTPROCESSES = 5;
+
+  S_OUTPUTS = 6;
+
+  S_EXTRACTORS = 7;
+}
+
+message Sequence {
+  SequenceType the_type = 1;
+  int64 index = 2;
+
+  optional string name = 3;
+}
+
+// NNExtractor
+//
+// A full NNExtractor setup includes:
+//   1. a bunch of inputs.
+//   2. optionally preprocessed inputs.
+//   3. put the preprocessed inputs into the models, generating the activations.
+//   4. optionally postprocessed results of the activations.
+//   5. integrated outputs.
+//
+//   6. a list of NNExtractor setup.
+message NNExtractor {
+  string name = 1;
+
+  repeated Sequence seq = 2;
+
+  repeated Items inputs = 3;
+  repeated Items preprocesses = 4;
+  repeated NNNode nodes = 5;
+  repeated Items postprocesses = 6;
+  repeated Items outputs = 7;
+  repeated NNNode forwards = 8;
+  repeated NNNode backwards = 9;
+
+  repeated NNExtractor extractors = 10;
+}
