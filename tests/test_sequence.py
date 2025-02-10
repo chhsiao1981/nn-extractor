@@ -2,7 +2,7 @@
 
 import unittest
 
-from nn_extractor import sequence  # noqa
+from nn_extractor import taskflow  # noqa
 
 
 class TestSequence(unittest.TestCase):

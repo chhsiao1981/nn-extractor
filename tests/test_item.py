@@ -19,7 +19,7 @@ class TestItem(unittest.TestCase):
     def test_serialize(self):
         expected_bytes = b'\n\x01a\x10\x01"\x02\x08\x01'
 
-        a = Item('a', ItemType.RAW, None)
+        a = Item('a', None, ItemType.RAW)
         a_pb = a.serialize_pb()
         a_bytes = a_pb.SerializeToString()
 
@@ -30,7 +30,7 @@ class TestItem(unittest.TestCase):
     def test_serialize_2(self):
         expected_bytes = b'\n\x01a\x10\x02\x1a\x04none"\x02\x08\x01'
 
-        a = Item('a', ItemType.OTHER, None, other_type='none')
+        a = Item('a', None, ItemType.OTHER, other_type='none')
         a_pb = a.serialize_pb()
         a_bytes = a_pb.SerializeToString()
 
@@ -41,7 +41,7 @@ class TestItem(unittest.TestCase):
     def test_deserialize(self):
         a_bytes = b'\n\x01a\x10\x01"\x02\x08\x01'
 
-        expected_a = Item('a', ItemType.RAW, None)
+        expected_a = Item('a', None, ItemType.RAW)
 
         a_pb = nnextractor_pb2.Item.FromString(a_bytes)
         a = Item.deserialize_pb(a_pb)

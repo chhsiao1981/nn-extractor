@@ -1,1 +1,3 @@
 /.venv
+/.fastapi.env
+/config.dev.toml

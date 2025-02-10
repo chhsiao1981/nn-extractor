@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-import logging
+import logging  # noqa
 
-from {{cookiecutter.pkg_name}} import {{cookiecutter.module}}
+from {{cookiecutter.pkg_name}} import {{cookiecutter.module}}  # noqa
 
 
 class Test{{cookiecutter.Module}}(unittest.TestCase):

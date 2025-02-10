@@ -25,7 +25,7 @@ class TestNNParameter(unittest.TestCase):
             [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]],
         ], dtype=np.int64)
 
-        a = NNParameter(name='a', record=record)
+        a = NNParameter(name='a', parameter=record)
 
         a_pb = a.serialize_pb()
 
@@ -45,20 +45,31 @@ class TestNNParameter(unittest.TestCase):
             [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]],
         ], dtype=np.int64)
 
-        expected_a = NNParameter(name='a', record=record)
+        expected_a = NNParameter(name='a', parameter=record)
 
         a = NNParameter.deserialize_pb(a_pb)
 
         assert a == expected_a
 
     def test_meta(self):
-        expected_meta = {'name': 'a', 'record': {'shape': (2, 3, 4), 'the_type': 'i64'}}
+        expected_meta = {
+            'name': 'a',
+            'parameter': {
+                'name': '',
+                'record': {
+                    'shape': (2, 3, 4),
+                    'the_type': 'i64',
+                },
+                'data_id': None,
+                'the_type': 'array',
+            }
+        }
         record = np.array([
             [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]],
             [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]],
         ], dtype=np.int64)
 
-        a = NNParameter(name='a', record=record)
+        a = NNParameter(name='a', parameter=record)
         meta = a.meta()
 
         print(f'meta: {meta}')

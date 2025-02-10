@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
 from dataclasses import dataclass
-from typing import Self, TypedDict, Optional, Any, Callable, NamedTuple
+from typing import Self, Optional, Any, Callable, NamedTuple
 
+from nn_extractor.nntensor import NNTensorType
+from nn_extractor.ops.spacing import Spacing
 import numpy as np
 import os
-import pickle
 
 import torch
 from torch.nn import Module
@@ -13,46 +14,19 @@ from torch.utils.hooks import RemovableHandle
 from tqdm import tqdm
 
 from . import cfg
-from .ndarray import NDArray
-from .nnrecord import NNRecord, MetaNNRecord
-from .nnparameter import NNParameter, MetaNNParameter
+from .nnrecord import NNRecord, NNRecordMeta
+from .nnparameter import NNParameter
 from . import nnextractor_pb2
 
 from . import profile
+from . import nntensor
 
-type Tensor = torch.Tensor | tuple[Tensor] | list[Tensor] | dict[str, Tensor]
+from .types import MetaNNNode, MetaNNRecord, MetaNNParameter, RecursiveNNTensor
 
 
 class Hook(NamedTuple):
     name: str
     hook: Callable
-
-
-class MetaNNNode(TypedDict):
-    name: str
-
-    inputs: list[MetaNNRecord]
-    params: list[MetaNNParameter]
-    activation: Optional[MetaNNRecord]
-
-    gradient_inputs: list[MetaNNRecord]
-    gradient_params: list[MetaNNParameter]
-    gradients: list[MetaNNRecord]
-
-    children: Optional[list[Self]]
-
-
-class PickleNNNode(NamedTuple):
-    name: str
-    inputs: Optional[list[NNRecord]] = None
-    params: Optional[list[NNParameter]] = None
-    activation: Optional[NNRecord] = None
-
-    gradient_inputs: Optional[list[NNRecord]] = None
-    gradient_params: Optional[list[NNParameter]] = None
-    gradients: Optional[list[NNRecord]] = None
-
-    children: Optional[list[Self]] = None
 
 
 @dataclass
@@ -73,11 +47,14 @@ class NNNode(object):
 
     children: Optional[list[Self]] = None
 
+    '''
+    to let the root node knows all children.
+    '''
     all_children: Optional[list[Self]] = None
 
     the_dir: str = ''
     the_index: int = 0
-    filename: str = ''
+    data_id: str = ''
 
     _is_init_children: bool = False
 
@@ -87,7 +64,7 @@ class NNNode(object):
 
         model: Optional[Module] = None,
 
-        output_dir: str = '',
+        the_dir: str = '',
         index: int = 0,
 
         inputs: Optional[list[NNRecord]] = None,
@@ -126,8 +103,8 @@ class NNNode(object):
         if children is None:
             children = []
 
-        if not output_dir:
-            output_dir = '.'
+        if not the_dir:
+            the_dir = '.'
 
         self.name = name
         self.inputs = inputs
@@ -145,9 +122,11 @@ class NNNode(object):
         # method 2: init with model
         self.model = model
 
-        self.the_dir = output_dir
+        self.the_dir = the_dir
         self.the_index = index
-        self.filename = f"{'_'.join(list(filter(None, [self.name, str(index)])))}"
+
+        # the_dir already includes the index.
+        self.data_id = os.sep.join([the_dir, self.name])
 
         self.init_children(all_children)
 
@@ -175,62 +154,11 @@ class NNNode(object):
             return False
         return True
 
-    def forward_serialize_pk(self, is_serialize_inputs=True, is_serialize_children=True) -> PickleNNNode:
-        profile.profile_start('nnnode.forward_serialize_pk')
-        serialized_inputs = []
-        if is_serialize_inputs and self.inputs:
-            serialized_inputs = [each.serialize_pk() for each in self.inputs]
-
-        serialized_params = [] if self.params is None \
-            else [each.serialize_pk() for each in self.params]
-        serialized_activation = None if self.activation is None \
-            else self.activation.serialize_pk()
-        profile.profile_stop('nnnode.forward_serialize_pk')
-
-        serialized_children = []
-        if is_serialize_children and self.children:
-            serialized_children = [each.forward_serialize_pk() for each in self.children]
-
-        return PickleNNNode(
-            name=self.name,
-            inputs=serialized_inputs,
-            params=serialized_params,
-            activation=serialized_activation,
-            children=serialized_children,
-        )
-
-    @classmethod
-    def deserialize_pk(cls, nnnode_pk: PickleNNNode) -> Self:
-        inputs = None if nnnode_pk.inputs is None \
-            else [NNRecord.deserialize_pk(each) for each in nnnode_pk.inputs]
-        params = None if nnnode_pk.params is None \
-            else [NNParameter.deserialize_pk(each) for each in nnnode_pk.params]
-        activation = None if nnnode_pk.activation is None \
-            else NNRecord.deserialize_pk(nnnode_pk.activation)
-
-        gradient_inputs = None if nnnode_pk.gradient_inputs is None \
-            else [NNRecord.deserialize_pk(each) for each in nnnode_pk.gradient_inputs]
-        gradient_params = None if nnnode_pk.gradient_params is None \
-            else [NNParameter.deserialize_pk(each) for each in nnnode_pk.params]
-        gradients = None if nnnode_pk.gradients is None \
-            else [NNRecord.deserialize_pk(each) for each in nnnode_pk.gradients]
-        children = None if nnnode_pk.children is None \
-            else [NNNode.deserialize_pk(each) for each in nnnode_pk.children]
-        return NNNode(
-            name=nnnode_pk.name,
-
-            inputs=inputs,
-            params=params,
-            activation=activation,
-
-            gradient_inputs=gradient_inputs,
-            gradient_params=gradient_params,
-            gradients=gradients,
-
-            children=children,
-        )
-
-    def forward_serialize_pb(self, is_serialize_inputs=True, is_serialize_children=True) -> nnextractor_pb2.NNNode:
+    def forward_serialize_pb(
+        self,
+        is_serialize_inputs=True,
+        is_serialize_children=True,
+    ) -> nnextractor_pb2.NNNode:
 
         profile.profile_start('nnnode.forward_serialize_pb')
         serialized_inputs = []
@@ -255,7 +183,11 @@ class NNNode(object):
             children=serialized_children,
         )
 
-    def backward_serialize_pb(self, is_serialize_inputs=True, is_serialize_children=True) -> nnextractor_pb2.NNNode:
+    def backward_serialize_pb(
+        self,
+        is_serialize_inputs=True,
+        is_serialize_children=True,
+    ) -> nnextractor_pb2.NNNode:
         serialized_gradient_inputs = []
         if is_serialize_inputs and self.gradient_inputs is not None:
             serialized_gradient_inputs = [each.serialize_pb() for each in self.gradient_inputs]
@@ -277,7 +209,11 @@ class NNNode(object):
             children=serialized_children,
         )
 
-    def serialize_pb(self, is_serialize_inputs=True, is_serialize_children=True) -> nnextractor_pb2.NNNode:
+    def serialize_pb(
+        self,
+        is_serialize_inputs=True,
+        is_serialize_children=True,
+    ) -> nnextractor_pb2.NNNode:
         serialized_inputs = []
         if is_serialize_inputs:
             serialized_inputs = [each.serialize_pb() for each in self.inputs]
@@ -315,7 +251,8 @@ class NNNode(object):
     def deserialize_pb(cls, nnnode_pb: nnextractor_pb2.NNNode) -> Self:
         inputs = [NNRecord.deserialize_pb(each) for each in nnnode_pb.inputs]
         params = [NNParameter.deserialize_pb(each) for each in nnnode_pb.params]
-        activation = None if nnnode_pb.activation.the_type == nnextractor_pb2.NNRecordType.NNR_UNSPECIFIED \
+        activation = None \
+            if nnnode_pb.activation.the_type == nnextractor_pb2.NNRecordType.NNR_UNSPECIFIED \
             else NNRecord.deserialize_pb(nnnode_pb.activation)
 
         gradient_inputs = [NNRecord.deserialize_pb(each) for each in nnnode_pb.gradient_inputs]
@@ -337,13 +274,19 @@ class NNNode(object):
         )
 
     def meta(self) -> MetaNNNode:
-        inputs = [each.meta() for each in self.inputs]
-        params = [each.meta() for each in self.params]
-        activation = None if self.activation is None else self.activation.meta()
+        '''
+        meta
 
-        gradient_inputs = [each.meta() for each in self.gradient_inputs]
-        gradient_params = [each.meta() for each in self.gradient_params]
-        gradients = [each.meta() for each in self.gradients]
+        assuming that the meta of the nnnode is immuntable.
+        '''
+        inputs = self._get_meta_nnrecords(self.inputs)
+        params = self._get_meta_params(self.params)
+        activation = self._get_meta_nnrecord(self.activation)
+
+        gradient_inputs = self._get_meta_nnrecords(self.gradient_inputs)
+        gradient_params = self._get_meta_params(self.gradient_params)
+        gradients = self._get_meta_nnrecords(self.gradients)
+
         children = None if self.children is None else [each.meta() for each in self.children]
 
         return MetaNNNode(
@@ -358,6 +301,33 @@ class NNNode(object):
 
             children=children,
         )
+
+    def _get_meta_nnrecords(
+        self: Self,
+        nnrecord: Optional[list[NNRecord]],
+    ) -> Optional[list[MetaNNRecord]]:
+        if nnrecord is None:
+            return None
+
+        meta_nnrecords = [each.meta() for each in nnrecord]
+        return meta_nnrecords
+
+    def _get_meta_params(
+        self: Self,
+        params: Optional[list[NNParameter]],
+    ) -> Optional[list[MetaNNParameter]]:
+        if params is None:
+            return None
+
+        meta_params = [each.meta() for each in params]
+        return meta_params
+
+    def _get_meta_nnrecord(self: Self, nnrecord: Optional[NNRecord]) -> MetaNNRecord:
+        if nnrecord is None:
+            return None
+
+        meta = nnrecord.meta()
+        return meta
 
     def init_children(self: Self, all_children: Optional[list[Self]] = None):
         if self.model is None:
@@ -377,11 +347,11 @@ class NNNode(object):
         children: list[NNNode] = [None] * len(named_children)
         for idx, (each_name, each_module) in enumerate(named_children):
             full_name = f'{self.name}.{each_name}'
-            each_output_dir = os.sep.join([self.the_dir, str(idx)])
+            each_the_dir = os.sep.join([self.the_dir, str(idx)])
             each_children = NNNode(
                 name=full_name,
                 model=each_module,
-                output_dir=each_output_dir,
+                the_dir=each_the_dir,
                 index=idx,
                 all_children=all_children,
             )
@@ -404,7 +374,10 @@ class NNNode(object):
             return
 
         # register forward hook
-        forward_hook = self.model.register_forward_hook(self._get_forward_activation(), with_kwargs=True)
+        forward_hook = self.model.register_forward_hook(
+            self._get_forward_activation(),
+            with_kwargs=True,
+        )
         self.forward_hook = forward_hook
 
         for each_children in self.children:
@@ -417,20 +390,48 @@ class NNNode(object):
             kwargs: Optional[dict[str, torch.Tensor]],
             output: torch.Tensor,
         ):
-
             sanitized_args = []
             sanitized_kwargs = []
             if cfg.config['is_nnnode_record_inputs']:
-                sanitized_args = [] if not args \
-                    else [NNRecord(self._sanitize_detach(each)) for each in args]
-                sanitized_kwargs = [] if not kwargs \
-                    else [NNRecord(self._sanitize_detach(each), name=each_name) for each_name, each in kwargs.items()]
+                if args:
+                    sanitized_args = [
+                        NNRecord(self._sanitize_detach(each), data_id=f'{self.data_id}/args/{idx}')
+                        for idx, each in enumerate(args)
+                    ]
+                if kwargs:
+                    sanitized_kwargs = [
+                        NNRecord(
+                            self._sanitize_detach(each),
+                            name=each_name,
+                            data_id=f'{self.data_id}/kwargs/{each_name}',
+                        )
+                        for each_name, each in kwargs.items()]
+            else:
+                if args:
+                    sanitized_args = [
+                        NNRecord(self._sanitize_meta(each), data_id=f'{self.data_id}/args/{idx}')
+                        for idx, each in enumerate(args)
+                    ]
+                if kwargs:
+                    sanitized_kwargs = [
+                        NNRecord(
+                            self._sanitize_meta(each),
+                            name=each_name,
+                            data_id=f'{self.data_id}/kwargs/{each_name}',
+                        )
+                        for each_name, each in kwargs.items()]
 
-            params = [NNParameter(name=each_name, record=self._sanitize_detach(each))
-                      for (each_name, each)
-                      in model.named_parameters(recurse=False)]
+            params = [
+                NNParameter(
+                    name=each_name,
+                    parameter=self._sanitize_detach(each, is_op_scale=False),
+                    data_id=f'{self.data_id}/params/{each_name}',
+                )
+                for (each_name, each)
+                in model.named_parameters(recurse=False)]
 
-            sanitized_output = NNRecord(self._sanitize_detach(output))
+            sanitized_output = NNRecord(self._sanitize_detach(
+                output), data_id=f'{self.data_id}/activation')
 
             self.inputs = sanitized_args + sanitized_kwargs
             self.params = params
@@ -455,7 +456,8 @@ class NNNode(object):
             return
 
         # register backward hook
-        backward_hook = self.model.register_full_backward_hook(self._get_backward_activation(), with_kwargs=True)
+        backward_hook = self.model.register_full_backward_hook(
+            self._get_backward_activation(), with_kwargs=True)
         self.backward_hook = backward_hook
 
         for each_children in self.children:
@@ -465,19 +467,38 @@ class NNNode(object):
         def hook(
             model: Module,
             grad_inputs: Optional[tuple[torch.Tensor, ...]],
-            grad_outputs: Optional[tuple[torch.Tensor, ...]],
+            gradients: Optional[tuple[torch.Tensor, ...]],
         ):
-            sanitized_inputs = [] if not grad_inputs \
-                else [NNRecord(self._sanitize_detach(each)) for each in grad_inputs]
-            params = [NNParameter(name=each_name, record=NNRecord(self._sanitize_detach(each)))
-                      for (each_name, each)
-                      in model.named_parameters(recurse=False)]
-            sanitized_outputs = [] if not grad_outputs \
-                else [NNRecord(self._sanitize_detach(each)) for each in grad_outputs]
+            sanitized_inputs = []
+            if grad_inputs:
+                sanitized_inputs = [
+                    NNRecord(
+                        value=self._sanitize_detach(each),
+                        data_id=f'{self.data_id}/grad_inputs/{idx}',
+                    )
+                    for idx, each in enumerate(grad_inputs)]
+
+            params = [
+                NNParameter(
+                    name=each_name,
+                    parameter=self._sanitize_detach(each, is_op_scale=False),
+                    data_id=f'{self.data_id}/grad_params/{each_name}',
+                )
+                for (each_name, each)
+                in model.named_parameters(recurse=False)]
+
+            sanitized_gradients = []
+            if gradients:
+                sanitized_gradients = [
+                    NNRecord(
+                        value=self._sanitize_detach(each),
+                        data_id=f'{self.data_id}/gradients/{idx}',
+                    )
+                    for idx, each in enumerate(gradients)]
 
             self.gradient_inputs = sanitized_inputs
             self.gradient_params = params
-            self.gradients = sanitized_outputs
+            self.gradients = sanitized_gradients
 
         return hook
 
@@ -488,53 +509,63 @@ class NNNode(object):
         self.backward_hook.remove()
         self.backward_hook = None
 
-    def _sanitize_detach(self: Self, val: Tensor) -> NDArray:
-        if isinstance(val, tuple):
-            return [self._sanitize_detach(each) for each in val]
-        elif isinstance(val, list):
-            return [self._sanitize_detach(each) for each in val]
+    def _sanitize_detach(self: Self, val: RecursiveNNTensor, is_op_scale=True) -> RecursiveNNTensor:
+        if isinstance(val, tuple) or isinstance(val, list):
+            return [self._sanitize_detach(each, is_op_scale) for each in val]
         elif isinstance(val, dict):
-            return {k: self._sanitize_detach(v) for k, v in val.items()}
+            return {k: self._sanitize_detach(v, is_op_scale) for k, v in val.items()}
         elif isinstance(val, torch.Tensor):
-            return val.detach().to('cpu').numpy()
+            ret = val.detach().to('cpu').numpy()
+            if not is_op_scale:
+                return ret
+            return Spacing(ret).integrate(self.name)
+        elif isinstance(val, np.ndarray):
+            if not is_op_scale:
+                return val
+            return Spacing(val).integrate(self.name)
         else:
+            cfg.logger.warning(f'NNNode._sanitize_detach: unknown val type: {type(val)}')
             return np.array([])
 
-    def forward_save_to_file(self: Self, output_dir: str, index: int):
+    def _sanitize_meta(self: Self, val: RecursiveNNTensor) -> NNRecordMeta:
+        if isinstance(val, tuple) or isinstance(val, list):
+            return [self._sanitize_meta(each) for each in val]
+        elif isinstance(val, dict):
+            return {k: self._sanitize_meta(v) for k, v in val.items()}
+        elif isinstance(val, torch.Tensor) or isinstance(val, np.ndarray):
+            return NNRecordMeta(shape=val.shape, the_type=nntensor.dtype(val))
+        elif isinstance(val, NNRecordMeta):
+            return val
+        else:
+            cfg.logger.warning(f'NNNode._sanitize_detach: unknown val type: {val} ({type(val)})')
+            return NNRecordMeta(shape=tuple([]), the_type=NNTensorType.UNSPECIFIED)
+
+    def forward_save_to_file(self: Self, seq_dir: str):
         if not self.all_children:
             return
 
-        is_serialize_inputs = cfg.config['is_nnnode_record_inputs']
+        for each in tqdm(self.all_children, desc=f'({seq_dir}) node: {self.name}'):
+            each._each_forward_save_to_file(seq_dir)
 
-        full_output_dir = os.sep.join([output_dir, str(index)])
-        for each in tqdm(self.all_children, desc=f'({index}) node: {self.name}'):
-            # each: Self  # XXX for typing
-            each._each_forward_save_to_file_pb(full_output_dir, is_serialize_inputs)
+    def _each_forward_save_to_file(self: Self, seq_dir: str):
+        if self.inputs is not None and cfg.config['is_nnnode_record_inputs']:
+            [each.save_to_file(seq_dir) for each in self.inputs]
+        if self.params is not None:
+            [each.save_to_file(seq_dir) for each in self.params]
+        if self.activation is not None:
+            self.activation.save_to_file(seq_dir)
 
-    def _each_forward_save_to_file_pk(self: Self, root_dir: str, is_serialize_inputs: bool):
-        serialized = self.forward_serialize_pk(is_serialize_inputs=is_serialize_inputs, is_serialize_children=False)
+    def backward_save_to_file(self: Self, seq_dir: str):
+        if not self.all_children:
+            return
 
-        profile.profile_start('nnnode._each_forward_save_to_file_pk')
+        for each in tqdm(self.all_children, desc=f'({seq_dir}) node: {self.name}'):
+            each._each_backward_save_to_file(seq_dir)
 
-        the_dir = os.sep.join([root_dir, self.the_dir])
-        if not os.path.exists(the_dir):
-            os.makedirs(the_dir, exist_ok=True)
-        out_filename = f"{os.sep.join([the_dir, self.filename])}.pk"
-        with open(out_filename, 'wb') as f:
-            pickle.dump(serialized, f)
-
-        profile.profile_stop('nnnode._each_forward_save_to_file_pk')
-
-    def _each_forward_save_to_file_pb(self: Self, root_dir: str, is_serialize_inputs: bool):
-        serialized = self.forward_serialize_pb(is_serialize_inputs=is_serialize_inputs, is_serialize_children=False)
-
-        profile.profile_start('nnnode._each_forward_save_to_file_pb')
-
-        the_dir = os.sep.join([root_dir, self.the_dir])
-        if not os.path.exists(the_dir):
-            os.makedirs(the_dir, exist_ok=True)
-        out_filename = f"{os.sep.join([the_dir, self.filename])}.pb"
-        with open(out_filename, 'wb') as f:
-            f.write(serialized.SerializeToString())
-
-        profile.profile_stop('nnnode._each_forward_save_to_file_pb')
+    def _each_backward_save_to_file(self: Self, seq_dir: str):
+        if self.gradient_inputs is not None and cfg.config['is_nnnode_record_inputs']:
+            [each.save_to_file(seq_dir) for each in self.gradient_inputs]
+        if self.gradient_params is not None:
+            [each.save_to_file(seq_dir) for each in self.gradient_params]
+        if self.gradients is not None:
+            [each.save_to_file(seq_dir) for each in self.gradients]

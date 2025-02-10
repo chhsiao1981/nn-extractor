@@ -5,7 +5,7 @@ import logging  # noqa
 
 import numpy as np
 from nn_extractor import nnrecord  # noqa
-from nn_extractor.nnrecord import NNRecord
+from nn_extractor.nnrecord import NNRecord, MetaNNRecordMeta
 from nn_extractor import nnextractor_pb2
 
 
@@ -148,7 +148,13 @@ class TestNNRecord(unittest.TestCase):
         assert a == expected_a
 
     def test_meta_ndarray(self):
-        expected_meta = {'shape': (2, 3, 4), 'the_type': 'bool'}
+        expected_meta = {
+            'name': '',
+            'record': {
+                'shape': (2, 3, 4), 'the_type': 'bool'},
+            'data_id': None,
+            'the_type': 'array',
+        }
 
         array = np.array([
             [[True, True, True, True], [True, True, True, False], [True, True, False, False]],
@@ -164,7 +170,19 @@ class TestNNRecord(unittest.TestCase):
         assert meta == expected_meta
 
     def test_meta_list(self):
-        expected_meta = [{'shape': (2, 3, 4), 'the_type': 'bool'}]
+        expected_meta = {
+            'name': '',
+            'record': [
+                {
+                    'name': '',
+                    'record': {'shape': (2, 3, 4), 'the_type': 'bool'},
+                    'data_id': None,
+                    'the_type': 'array',
+                }
+            ],
+            'data_id': None,
+            'the_type': 'list',
+        }
 
         array = np.array([
             [[True, True, True, True], [True, True, True, False], [True, True, False, False]],
@@ -180,7 +198,19 @@ class TestNNRecord(unittest.TestCase):
         assert meta == expected_meta
 
     def test_meta_dict(self):
-        expected_meta = {'a': {'shape': (2, 3, 4), 'the_type': 'bool'}}
+        expected_meta = {
+            'name': '',
+            'record': {
+                'a': {
+                    'name': '',
+                    'record': {'shape': (2, 3, 4), 'the_type': 'bool'},
+                    'data_id': None,
+                    'the_type': 'array',
+                }
+            },
+            'data_id': None,
+            'the_type': 'map',
+        }
 
         array = np.array([
             [[True, True, True, True], [True, True, True, False], [True, True, False, False]],
@@ -196,7 +226,12 @@ class TestNNRecord(unittest.TestCase):
         assert meta == expected_meta
 
     def test_meta_named_ndarray(self):
-        expected_meta = {'name': 'name_a', 'record': {'shape': (2, 3, 4), 'the_type': 'bool'}}
+        expected_meta = {
+            'name': 'name_a',
+            'record': {'shape': (2, 3, 4), 'the_type': 'bool'},
+            'data_id': None,
+            'the_type': 'array',
+        }
 
         array = np.array([
             [[True, True, True, True], [True, True, True, False], [True, True, False, False]],
@@ -210,3 +245,7 @@ class TestNNRecord(unittest.TestCase):
         print(f'meta: {meta}')
 
         assert meta == expected_meta
+
+    def test_meta_nnrecord_meta(self):
+        a = MetaNNRecordMeta(shape=[1, 2, 3], the_type='test', is_meta_only=True)
+        assert a['is_meta_only'] is True

@@ -1,14 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
-DIR_INPUTS = 'inputs'
-DIR_PREPROCESSES = 'preprocesses'
-DIR_FORWARDS = 'forwards'
-DIR_POSTPROCESSES = 'postprocesses'
-DIR_BACKWARDS = 'backwards'
-DIR_OUTPUTS = 'outputs'
-
-METADATA_FILENAME_PREFIX = 'metadata'
+METADATA_FILENAME_PREFIX = 'meta'
 
 # for ndarray
 META_UNSPECIFIED = 'unknown'
@@ -25,3 +18,17 @@ META_UINT8 = 'u8'
 META_UINT16 = 'u16'
 META_UINT32 = 'u32'
 META_UINT64 = 'u64'
+
+META_BFLOAT16 = 'bf16'
+
+META_COMPLEX32 = 'c32'
+META_COMPLEX64 = 'c64'
+META_COMPLEX128 = 'c128'
+
+META_UQINT8 = 'uqi8'
+META_QINT8 = 'qi8'
+META_QINT32 = 'qi32'
+META_UQINT4 = 'uqi4'
+
+META_FLOAT8_E4M3FN = 'f8e4'
+META_FLOAT8_E5M2 = 'f8e5'

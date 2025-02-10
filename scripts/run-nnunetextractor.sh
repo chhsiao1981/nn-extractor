@@ -23,5 +23,5 @@ export nnUNet_results="${nnUNet_rootdir}/results"
 # list files based on _0000.nii.gz and run each file.
 for filename in `ls ${input_dir}/*_0000.nii.gz`
 do
-    nnunet-extractor -i ${filename}  -o ${nnUNet_output_dir} -d ${nnUNet_train_dataset} -c ${nnUNet_config} -f ${nnUNet_fold} -N nnunetv2 -C ${config}
+    nnunet-extractor -i ${filename}  -o ${nnUNet_output_dir} -d ${nnUNet_train_dataset} -c ${nnUNet_config} -f ${nnUNet_fold} --save-probabilities -N nnunetv2 -C ${config}
 done

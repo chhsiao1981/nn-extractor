@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from dataclasses import dataclass
-from typing import Self, TypedDict, Optional
+from typing import Self, Optional
 
 import json
 from torch.nn import Module
@@ -10,24 +10,14 @@ import os
 
 from . import cfg
 from . import constants
-from .items import Items, MetaItems
+from .items import Items
 
-from .nnnode import NNNode, MetaNNNode
+from .nnnode import NNNode
 
-from .sequence import Sequence, SequenceType, MetaSequence
+from .taskflow import Taskflow, TaskflowType
 
-
-class MetaNNExtractor(TypedDict):
-    name: str
-
-    seq: list[MetaSequence]
-    inputs: list[MetaItems]
-    preprocesses: list[MetaItems]
-    nodes: list[MetaNNNode]
-    postprocesses: list[MetaItems]
-    outputs: list[MetaItems]
-
-    extractors: list[Self]
+from .types import MetaNNExtractor
+from . import utils
 
 
 @dataclass
@@ -39,7 +29,7 @@ class NNExtractor(object):
     '''
     name: str
 
-    seq: list[Sequence]
+    taskflow: list[Taskflow]
     inputs: list[Items]
     preprocesses: list[Items]
     nodes: list[NNNode]
@@ -50,13 +40,42 @@ class NNExtractor(object):
 
     extractors: list[Self]
 
+    parent: Optional[Self]
+
+    '''
+    the root-dir of this extractor: same as the name.
+    '''
     root_dir: str
-    inputs_dir: str
+
+    '''
+    the inputs-dir of this extractor: [root_dir]/[DIR_INPUTS (inputs)]
+    '''
+    input_dir: str
+
+    '''
+    the preprocess-dir of this extractor: [root_dir]/[DIR_PREPROCESSES (preprocesses)]
+    '''
     preprocess_dir: str
+
+    '''
+    the forward-dir of this extractor: [root_dir]/[DIR_FORWARDS (forwards)]
+    '''
     forward_dir: str
+
+    '''
+    the backward-dir of this extractor: [root_dir]/[DIR_BACKWARDS (backwards)]
+    '''
     backward_dir: str
+
+    '''
+    the postprocess-dir of this extractor: [root_dir]/[DIR_POSTPROCESSES (postprocesses)]
+    '''
     postprocess_dir: str
-    outputs_dir: str
+
+    '''
+    the outputs-dir of this extractor: [root_dir]/[DIR_OUTPUTS (outputs)]
+    '''
+    output_dir: str
 
     current_forward_node: Optional[NNNode] = None
     current_backward_node: Optional[NNNode] = None
@@ -64,9 +83,9 @@ class NNExtractor(object):
     forward_snapshot_index: int = 0
     backward_snapshot_index: int = 0
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, parent: Optional[Self] = None):
         self.name = name
-        self.seq = []
+        self.taskflow = []
         self.inputs = []
         self.preprocesses = []
         self.nodes = []
@@ -76,66 +95,122 @@ class NNExtractor(object):
         self.nodes_by_name = {}
         self.extractors = []
 
-        self.root_dir = os.sep.join([cfg.config['output_dir'], name])
-        os.makedirs(self.root_dir, exist_ok=True)
-        self.inputs_dir = os.sep.join([self.root_dir, constants.DIR_INPUTS])
-        os.makedirs(self.inputs_dir, exist_ok=True)
-        self.preprocess_dir = os.sep.join([self.root_dir, constants.DIR_PREPROCESSES])
-        os.makedirs(self.preprocess_dir, exist_ok=True)
-        self.forward_dir = os.sep.join([self.root_dir, constants.DIR_FORWARDS])
-        os.makedirs(self.forward_dir, exist_ok=True)
-        self.backward_dir = os.sep.join([self.root_dir, constants.DIR_BACKWARDS])
-        os.makedirs(self.backward_dir, exist_ok=True)
-        self.postprocess_dir = os.sep.join([self.root_dir, constants.DIR_POSTPROCESSES])
-        os.makedirs(self.postprocess_dir, exist_ok=True)
-        self.outputs_dir = os.sep.join([self.root_dir, constants.DIR_OUTPUTS])
-        os.makedirs(self.outputs_dir, exist_ok=True)
+        self.parent = parent
+
+        self.root_dir = name
+        self.input_dir = os.sep.join([self.root_dir, f'{TaskflowType.INPUT}'])
+        self.preprocess_dir = os.sep.join([self.root_dir, f'{TaskflowType.PREPROCESS}'])
+        self.forward_dir = os.sep.join([self.root_dir, f'{TaskflowType.FORWARD}'])
+        self.backward_dir = os.sep.join([self.root_dir, f'{TaskflowType.BACKWARD}'])
+        self.postprocess_dir = os.sep.join([self.root_dir, f'{TaskflowType.POSTPROCESS}'])
+        self.output_dir = os.sep.join([self.root_dir, f'{TaskflowType.OUTPUT}'])
 
     @cfg.check_disable
-    def add_inputs(self: Self, data: dict, name: str = '', is_save=True):
+    def add_inputs(
+        self: Self,
+        data: dict,
+        name: str = '',
+        is_save=True,
+    ):
+        flow_id = len(self.inputs)
         items = Items(name=name, item_dict=data)
-        index = len(self.inputs)
-        self.seq.append(Sequence(SequenceType.INPUTS, index))
+
         if is_save:
-            output_dir = os.sep.join([self.inputs_dir, str(index)])
-            items.save_to_file(output_dir)
+            flow_dir = os.sep.join([self.input_dir, f'{flow_id}'])
+            items.save_to_file(flow_dir)
+
         self.inputs.append(items)
 
+        # add to seq
+        self.taskflow.append(Taskflow(
+            name=name,
+            the_type=TaskflowType.INPUT,
+            flow_id=flow_id,
+            items=items,
+        ))
+
     @cfg.check_disable
-    def add_preprocess(self: Self, data: dict, name: str = '', is_save=True):
+    def add_preprocess(
+        self: Self,
+        data: dict,
+        name: str = '',
+        is_save=True,
+    ):
+        flow_id = len(self.preprocesses)
         items = Items(name=name, item_dict=data)
-        index = len(self.preprocesses)
-        self.seq.append(Sequence(SequenceType.PREPROCESS, index))
+
         if is_save:
-            output_dir = os.sep.join([self.preprocess_dir, str(index)])
-            items.save_to_file(output_dir)
+            flow_dir = os.sep.join([self.preprocess_dir, f'{flow_id}'])
+            items.save_to_file(flow_dir)
+
         self.preprocesses.append(items)
 
-    @cfg.check_disable
-    def add_postprocess(self: Self, data: dict, name: str = '', is_save=True):
-        items = Items(item_dict=data, name=name)
-        index = len(self.postprocesses)
-        self.seq.append(Sequence(SequenceType.POSTPROCESSES, index))
-        if is_save:
-            output_dir = os.sep.join([self.postprocess_dir, str(index)])
-            items.save_to_file(output_dir)
-        self.postprocesses.append(items)
+        # add to seq
+        self.taskflow.append(Taskflow(
+            name=name,
+            the_type=TaskflowType.PREPROCESS,
+            flow_id=flow_id,
+            items=items,
+        ))
 
     @cfg.check_disable
-    def add_outputs(self: Self, data: dict, name: str = '', is_save=True):
+    def add_postprocess(
+        self: Self,
+        data: dict,
+        name: str = '',
+        is_save=True,
+    ):
+        flow_id = len(self.postprocesses)
         items = Items(item_dict=data, name=name)
-        index = len(self.outputs)
-        self.seq.append(Sequence(SequenceType.OUTPUTS, index))
+
         if is_save:
-            output_dir = os.sep.join([self.outputs_dir, str(index)])
-            items.save_to_file(output_dir)
+            flow_dir = os.sep.join([self.postprocess_dir, f'{flow_id}'])
+            items.save_to_file(flow_dir)
+
+        self.postprocesses.append(items)
+
+        # add to seq
+        self.taskflow.append(Taskflow(
+            name=name,
+            the_type=TaskflowType.POSTPROCESS,
+            flow_id=flow_id,
+            items=items,
+        ))
+
+    @cfg.check_disable
+    def add_outputs(
+        self: Self,
+        data: dict,
+        name: str = '',
+        is_save=True,
+    ):
+        flow_id = len(self.outputs)
+        items = Items(item_dict=data, name=name)
+
+        if is_save:
+            flow_dir = os.sep.join([self.output_dir, f'{flow_id}'])
+            items.save_to_file(flow_dir)
+
         self.outputs.append(items)
+
+        # add to seq
+        self.taskflow.append(Taskflow(
+            name=name,
+            the_type=TaskflowType.OUTPUT,
+            flow_id=flow_id,
+            items=items,
+        ))
 
     @cfg.check_disable
     def add_extractor(self: Self, extractor: Self):
-        index = len(self.extractors)
-        self.seq.append(Sequence(SequenceType.EXTRACTORS, index, extractor.name))
+        flow_id = len(self.extractors)
+        self.taskflow.append(Taskflow(
+            name=extractor.name,
+            the_type=TaskflowType.EXTRACTOR,
+            flow_id=flow_id,
+        ))
         self.extractors.append(extractor)
+        extractor.parent = self
 
     @cfg.check_disable
     def register_hook(self: Self, model: Module, name: str = '', is_warn_exist=False):
@@ -162,7 +237,8 @@ class NNExtractor(object):
 
         if name in self.nodes_by_name:
             if is_warn_exist:
-                cfg.logger.warning(f'NNExtractor.register_hook: node name already registered: {name}')
+                cfg.logger.warning(
+                    f'NNExtractor.register_hook: node name already registered: {name}')
             node = self.nodes_by_name[name]
         else:
             node = NNNode(name=name, model=model)
@@ -182,10 +258,19 @@ class NNExtractor(object):
 
     @cfg.check_disable
     def forward_snapshot(self: Self):
-        index = self.forward_snapshot_index
-        self.seq.append(Sequence(SequenceType.FORWARD, index, self.current_forward_node.name))
-        self.current_forward_node.forward_save_to_file(self.forward_dir, index)
+        flow_id = self.forward_snapshot_index
+
+        flow_dir = os.sep.join([self.forward_dir, f'{flow_id}'])
+        self.current_forward_node.forward_save_to_file(flow_dir)
+
         self.forward_snapshot_index += 1
+
+        # add to seq
+        self.taskflow.append(Taskflow(
+            the_type=TaskflowType.FORWARD,
+            flow_id=flow_id,
+            name=self.current_forward_node.name,
+        ))
 
     @cfg.check_disable
     def register_backward_hook(self: Self, model: Module, name: str = '', is_warn_exist=False):
@@ -198,7 +283,8 @@ class NNExtractor(object):
 
         if name in self.nodes_by_name:
             if is_warn_exist:
-                cfg.logger.warning(f'NNExtractor.register_hook: node name already registered: {name}')
+                cfg.logger.warning(
+                    f'NNExtractor.register_hook: node name already registered: {name}')
             node = self.nodes_by_name[name]
         else:
             node = NNNode(name=name, model=model)
@@ -218,10 +304,19 @@ class NNExtractor(object):
 
     @cfg.check_disable
     def backward_snapshot(self: Self):
-        index = self.backward_snapshot_index
-        self.seq.append(Sequence(SequenceType.BACKWARD, index, self.current_backward_node.name))
-        self.current_backward_node.forward_save_to_file(self.backward_dir, index)
+        flow_id = self.backward_snapshot_index
+
+        flow_dir = os.sep.join([self.backward_dir, f'{flow_id}'])
+        self.current_backward_node.backward_save_to_file(flow_dir)
+
         self.backward_snapshot_index += 1
+
+        # add to seq
+        self.taskflow.append(Taskflow(
+            the_type=TaskflowType.BACKWARD,
+            flow_id=flow_id,
+            name=self.current_backward_node.name,
+        ))
 
     @cfg.check_disable
     def remove_hook(self: Self):
@@ -241,14 +336,11 @@ class NNExtractor(object):
             self.current_backward_node = None
 
     @cfg.check_disable
-    def save(self: Self, outputs_dir: str = ''):
-        if outputs_dir == '':
-            outputs_dir = self.root_dir
-
-        self.save_meta(outputs_dir)
+    def save(self: Self):
+        self.save_meta()
 
     def meta(self: Self) -> Optional[MetaNNExtractor]:
-        meta_seq = [each.meta() for each in self.seq]
+        meta_taskflow = [each.meta() for each in self.taskflow]
         meta_inputs = [each.meta() for each in self.inputs]
         meta_preprocesses = [each.meta() for each in self.preprocesses]
         meta_nodes = [each.meta() for each in self.nodes]
@@ -256,25 +348,34 @@ class NNExtractor(object):
         meta_outputs = [each.meta() for each in self.outputs]
         meta_extractors = [each.meta() for each in self.extractors]
 
+        parent_name = '' if self.parent is None else self.parent.name
+
         return MetaNNExtractor(
             name=self.name,
 
-            seq=meta_seq,
+            taskflow=meta_taskflow,
             inputs=meta_inputs,
             preprocesses=meta_preprocesses,
             nodes=meta_nodes,
             postprocesses=meta_postprocesses,
             outputs=meta_outputs,
             extractors=meta_extractors,
+
+            parent_name=parent_name,
         )
 
     @cfg.check_disable
-    def save_meta(self: Self, outputs_dir: str = ''):
+    def save_meta(self: Self):
         '''
         save to json for easy reading in js.
         '''
         the_meta = self.meta()
-        out_filename = os.sep.join([outputs_dir, f'{self.name}.meta.json'])
+        out_filename = os.sep.join([
+            cfg.config['output_dir'],
+            self.root_dir,
+            f'{self.name}.{constants.METADATA_FILENAME_PREFIX}.json',
+        ])
 
+        utils.ensure_dir(out_filename)
         with open(out_filename, 'w') as f:
-            json.dump(the_meta, f)
+            json.dump(the_meta, f, indent=2)
