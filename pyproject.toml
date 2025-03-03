@@ -15,7 +15,7 @@ dependencies = [
     'pyarrow==19.0.0',
     'fastapi[standard]==0.115.8',
     'pydantic-settings==2.7.1',
-    'nnunetv2 @ git+ssh://git@github.com/MIC-DKFZ/nnUNet#v2.5.2',
+    'nnunetv2 @ git+ssh://git@github.com/MIC-DKFZ/nnUNet#v2.6.0',
 ]
 
 authors = [
