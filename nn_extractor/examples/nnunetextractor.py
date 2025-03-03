@@ -1,7 +1,10 @@
 from queue import Queue
 from threading import Thread
-from typing import Union
+from typing import Optional, Union
 
+from nn_extractor import nii
+from nn_extractor.nnextractor import NNExtractor
+from nn_extractor.ops.crop import Crop
 import numpy as np
 import torch
 from acvl_utils.cropping_and_padding.padding import pad_nd_image
@@ -11,7 +14,7 @@ from tqdm import tqdm
 
 from nnunetv2.configuration import default_num_processes
 from nnunetv2.inference.data_iterators import PreprocessAdapterFromNpy
-from nnunetv2.inference.export_prediction import export_prediction_from_logits, \
+from nnunetv2.inference.export_prediction import \
     convert_predicted_logits_to_segmentation_with_correct_shape
 from nnunetv2.inference.sliding_window_prediction import compute_gaussian
 from nnunetv2.utilities.file_path_utilities import get_output_folder
@@ -19,39 +22,33 @@ from nnunetv2.utilities.helpers import empty_cache, dummy_context
 
 from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor as baseNNUNetPredictor
 
+from . import export_prediction
+
 
 class nnUNetPredictor(baseNNUNetPredictor):
-    def __init__(self,
-                 tile_step_size: float = 0.5,
-                 use_gaussian: bool = True,
-                 use_mirroring: bool = True,
-                 perform_everything_on_device: bool = True,
-                 device: torch.device = torch.device('cuda'),
-                 verbose: bool = False,
-                 verbose_preprocessing: bool = False,
-                 allow_tqdm: bool = True):
-        self.verbose = verbose
-        self.verbose_preprocessing = verbose_preprocessing
-        self.allow_tqdm = allow_tqdm
+    '''
+    nnUNetPredictor with NNExtractor
+    '''
 
-        self.plans_manager, self.configuration_manager, self.list_of_parameters, self.network, self.dataset_json, \
-        self.trainer_name, self.allowed_mirroring_axes, self.label_manager = None, None, None, None, None, None, None, None  # noqa
+    '''
+    extractor
 
-        self.tile_step_size = tile_step_size
-        self.use_gaussian = use_gaussian
-        self.use_mirroring = use_mirroring
-        if device.type == 'cuda':
-            torch.backends.cudnn.benchmark = True
-        else:
-            print(f'perform_everything_on_device=True is only supported for cuda devices! Setting this to False')  # noqa
-            perform_everything_on_device = False
-        self.device = device
-        self.perform_everything_on_device = perform_everything_on_device
+    The procedure of prediction in nnUNetPredictor is sliding-window based prediction.
+    Therefore, instead of directly having nnUNetPredictor.extractor registers forward_hooks.
+    There are several sub-extractors registering forward_hooks.
+    nnUNetPredictor.extractor only adds inputs, postprocess, outputs, and the sub-extractors.
+    '''
+    extractor: Optional[NNExtractor] = None
 
     def predict_single_npy_array(self, input_image: np.ndarray, image_properties: dict,
                                  segmentation_previous_stage: np.ndarray = None,
                                  output_file_truncated: str = None,
-                                 save_or_return_probabilities: bool = False):
+                                 save_or_return_probabilities: bool = False,
+
+                                 nnextractor_name: str = '',
+                                 label_image: Optional[np.ndarray] = None,
+                                 label_image_properties: Optional[dict] = None,
+                                 ):
         """
         WARNING: SLOW. ONLY USE THIS IF YOU CANNOT GIVE NNUNET MULTIPLE IMAGES AT ONCE FOR SOME REASON.
 
@@ -65,6 +62,18 @@ class nnUNetPredictor(baseNNUNetPredictor):
                      you need to transpose your axes AND your spacing from [x,y,z] to [z,y,x]!
         image_properties must only have a 'spacing' key!
         """
+        # init self.extractor
+        self.extractor = NNExtractor(name=nnextractor_name)
+
+        # self.extractor add image as input.
+        self.extractor.add_inputs(
+            name=nnextractor_name,
+            data={
+                'nii': nii.from_sitk_image_props(input_image, image_properties),
+                'previous_stage': segmentation_previous_stage,
+            },
+        )
+
         ppa = PreprocessAdapterFromNpy([input_image], [segmentation_previous_stage], [image_properties],  # noqa
                                        [output_file_truncated],
                                        self.plans_manager, self.dataset_json, self.configuration_manager,  # noqa
@@ -73,6 +82,15 @@ class nnUNetPredictor(baseNNUNetPredictor):
             print('preprocessing')
         dct = next(ppa)
 
+        # self.extractor add dct.data and dct.data_properties in preprocess.
+        properties_dict = dct['data_properties']
+        img = dct['data'].detach().to('cpu').numpy()
+        crop_region = properties_dict['bbox_used_for_cropping']
+        self.extractor.add_preprocess(
+            name=nnextractor_name,
+            data={'img': Crop(img=img, region=crop_region), 'props': properties_dict},
+        )
+
         if self.verbose:
             print('predicting')
         predicted_logits = self.predict_logits_from_preprocessed_data(dct['data']).cpu()
@@ -80,9 +98,23 @@ class nnUNetPredictor(baseNNUNetPredictor):
         if self.verbose:
             print('resampling to original shape')
         if output_file_truncated is not None:
-            export_prediction_from_logits(predicted_logits, dct['data_properties'], self.configuration_manager,  # noqa
-                                          self.plans_manager, self.dataset_json, output_file_truncated,  # noqa
-                                          save_or_return_probabilities)
+            export_prediction.export_prediction_from_logits(
+                predicted_logits, dct['data_properties'],
+                self.configuration_manager,
+                self.plans_manager,
+                self.dataset_json,
+                output_file_truncated,
+                save_or_return_probabilities,
+
+                extractor=self.extractor,
+                label_image=label_image,
+                label_image_properties=label_image_properties,
+            )
+
+            # remove hooks and save.
+            self.extractor.remove_hook()
+            self.extractor.save()
+
         else:
             ret = convert_predicted_logits_to_segmentation_with_correct_shape(predicted_logits, self.plans_manager,  # noqa
                                                                               self.configuration_manager,  # noqa
@@ -90,6 +122,27 @@ class nnUNetPredictor(baseNNUNetPredictor):
                                                                               dct['data_properties'],  # noqa
                                                                               return_probabilities=  # fmt: off  # noqa
                                                                               save_or_return_probabilities)  # noqa
+            export_prediction.extractor_add_postprocess(
+                predicted_array_or_file=predicted_logits,
+                properties_dict=properties_dict,
+                plans_manager=self.plans_manager,
+                save_probabilities=save_or_return_probabilities,
+                ret=ret,
+
+                extractor=self.extractor,
+            )
+
+            export_prediction.extractor_add_outputs(
+                save_probabilities=save_or_return_probabilities,
+                ret=ret,
+                label_image=label_image,
+                label_image_properties=label_image_properties,
+            )
+
+            # remove hooks and save.
+            self.extractor.remove_hook()
+            self.extractor.save()
+
             if save_or_return_probabilities:
                 return ret[0], ret[1]
             else:

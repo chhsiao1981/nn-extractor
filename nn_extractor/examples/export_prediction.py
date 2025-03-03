@@ -44,7 +44,7 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
     )
 
     # extractor add postprocess
-    _extractor_add_postprocess(
+    extractor_add_postprocess(
         predicted_array_or_file,
         properties_dict,
         plans_manager,
@@ -56,36 +56,25 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
 
     del predicted_array_or_file
 
+    # extractor add outputs
+    extractor_add_outputs(
+        save_probabilities,
+        ret,
+        label_image,
+        label_image_properties,
+
+        extractor,
+    )
+
     # save
     if save_probabilities:
         segmentation_final, probabilities_final = ret
         np.savez_compressed(output_file_truncated + '.npz', probabilities=probabilities_final)
         save_pickle(properties_dict, output_file_truncated + '.pkl')
 
-        # extractor add outputs
-        _extractor_add_outputs(
-            segmentation_final,
-            probabilities_final,
-            label_image,
-            label_image_properties,
-
-            extractor,
-        )
-
         del probabilities_final, ret
     else:
         segmentation_final = ret
-
-        # extractor add outputs
-        _extractor_add_outputs(
-            segmentation_final,
-            None,
-            label_image,
-            label_image_properties,
-
-            extractor,
-        )
-
         del ret
 
     rw = plans_manager.image_reader_writer_class()
@@ -93,7 +82,7 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
                  properties_dict)
 
 
-def _extractor_add_postprocess(
+def extractor_add_postprocess(
     predicted_array_or_file: np.ndarray | torch.Tensor,
     properties_dict: dict,
     plans_manager: PlansManager,
@@ -132,9 +121,9 @@ def _extractor_add_postprocess(
             })
 
 
-def _extractor_add_outputs(
-    segmentation_final: np.ndarray,
-    probabilities_final: Optional[np.ndarray],
+def extractor_add_outputs(
+    save_probabilities: bool,
+    ret: np.ndarray | tuple[np.ndarray, np.ndarray | Any],
     label_image: NNTensor,
     label_image_properties: NNTensor,
 
@@ -143,13 +132,20 @@ def _extractor_add_outputs(
     if extractor is None:
         return
 
+    segmentation: Optional[np.ndarray] = None
+    probability: Optional[np.ndarray] = None
+    if save_probabilities:
+        segmentation, probability = ret[0], ret[1]
+    else:
+        segmentation = ret
+
     label_nii: Optional[NII] = None
     if label_image is not None and label_image_properties is not None:
         label_nii = nii.from_sitk_image_props(label_image, label_image_properties)
 
-    outputs_data = {'segmentation': segmentation_final}
-    if probabilities_final is not None:
-        outputs_data['probability'] = probabilities_final
+    outputs_data = {'segmentation': segmentation}
+    if probability is not None:
+        outputs_data['probability'] = probability
     if label_nii is not None:
         outputs_data['ground_truth'] = label_nii
 
