@@ -1,11 +1,12 @@
 import itertools
 from queue import Queue
 from threading import Thread
-from typing import Optional, Union
+from typing import Optional, Self, Union
 
 from nn_extractor import nii
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.crop import Crop
+from nn_extractor.ops.flip import Flip
 from nn_extractor.ops.pad import Pad
 import numpy as np
 import torch
@@ -188,22 +189,65 @@ class nnUNetPredictor(baseNNUNetPredictor):
         return prediction
 
     @torch.inference_mode()
-    def _internal_maybe_mirror_and_predict(self, x: torch.Tensor) -> torch.Tensor:
+    def _internal_maybe_mirror_and_predict(
+        self: Self,
+        x: torch.Tensor,
+        sub_extractor: NNExtractor,
+    ) -> torch.Tensor:
+        # sub-extractor register forward hooks.
+        sub_extractor.register_forward_hook(self.network)
+
         mirror_axes = self.allowed_mirroring_axes if self.use_mirroring else None
         prediction = self.network(x)
 
+        # sub-extractor forward snapshot
+        sub_extractor.forward_snapshot()
+
         if mirror_axes is not None:
             # check for invalid numbers in mirror_axes
-            # x should be 5d for 3d images and 4d for 2d. so the max value of mirror_axes cannot exceed len(x.shape) - 3
-            assert max(mirror_axes) <= x.ndim - 3, 'mirror_axes does not match the dimension of the input!'
+            # x should be 5d for 3d images and 4d for 2d. so the max value of mirror_axes cannot exceed len(x.shape) - 3  # noqa
+            assert max(mirror_axes) <= x.ndim - 3, 'mirror_axes does not match the dimension of the input!'  # noqa
 
             mirror_axes = [m + 2 for m in mirror_axes]
             axes_combinations = [
-                c for i in range(len(mirror_axes)) for c in itertools.combinations(mirror_axes, i + 1)
+                c for i in range(len(mirror_axes)) for c in itertools.combinations(mirror_axes, i + 1)  # noqa
             ]
-            for axes in axes_combinations:
-                prediction += torch.flip(self.network(torch.flip(x, axes)), axes)
-            prediction /= (len(axes_combinations) + 1)
+            for idx, axes in enumerate(axes_combinations):
+                # add each_flipped for sub-extractor.
+                each_flipped_x = torch.flip(x, axes)
+
+                # sub-extractor add-preprocess
+                sub_extractor.add_preprocess(
+                    name=f'mirror-flip-{idx}',
+                    data={'flipped': Flip(img=each_flipped_x, axes=axes)},
+                )
+
+                # add each-prediction for sub-extractor
+                each_prediction = self.network(each_flipped_x)
+                unflipped_prediction = torch.flip(each_prediction, axes)
+                prediction += unflipped_prediction
+
+                # sub-extractor add mirroring postrocess: unflip
+                sub_extractor.add_postprocess(
+                    name=f'mirror-unflip-{idx}',
+                    data={
+                        'each_prediction': each_prediction,
+                        'unflipped': Flip(img=unflipped_prediction, axes=axes),
+                        'prediction': prediction,
+                    },
+                )
+
+            n_axes_combinations_plus_1 = len(axes_combinations) + 1
+            prediction /= n_axes_combinations_plus_1
+
+            # sub-extractor add mirroring postprocess: normalize
+            sub_extractor.add_postprocess(
+                name='mirror-normalize',
+                data={
+                    'prediction': prediction,
+                    'n_axes_combinations_plus_1': n_axes_combinations_plus_1,
+                },
+            )
         return prediction
 
     @torch.inference_mode()
