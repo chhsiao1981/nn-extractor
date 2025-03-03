@@ -5,6 +5,7 @@ from typing import Optional, Union
 from nn_extractor import nii
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.crop import Crop
+from nn_extractor.ops.pad import Pad
 import numpy as np
 import torch
 from acvl_utils.cropping_and_padding.padding import pad_nd_image
@@ -149,7 +150,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 return ret
 
     @torch.inference_mode()
-    def predict_logits_from_preprocessed_data(self, data: torch.Tensor) -> torch.Tensor:
+    def predict_logits_from_preprocessed_data(self, data: torch.Tensor, nnextractor_name: str) -> torch.Tensor:  # noqa
         """
         IMPORTANT! IF YOU ARE RUNNING THE CASCADE, THE SEGMENTATION FROM THE PREVIOUS STAGE MUST ALREADY BE STACKED ON
         TOP OF THE IMAGE AS ONE-HOT REPRESENTATION! SEE PreprocessAdapter ON HOW THIS SHOULD BE DONE!
@@ -161,7 +162,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
         torch.set_num_threads(default_num_processes if default_num_processes < n_threads else n_threads)  # noqa
         prediction = None
 
-        for params in self.list_of_parameters:
+        for idx, params in enumerate(self.list_of_parameters):
 
             # messing with state dict names...
             if not isinstance(self.network, OptimizedModule):
@@ -172,10 +173,11 @@ class nnUNetPredictor(baseNNUNetPredictor):
             # why not leave prediction on device if perform_everything_on_device? Because this may cause the  # noqa
             # second iteration to crash due to OOM. Grabbing that with try except cause way more bloated code than  # noqa
             # this actually saves computation time
+            prompt = f'{nnextractor_name}-{idx}'
             if prediction is None:
-                prediction = self.predict_sliding_window_return_logits(data).to('cpu')
+                prediction = self.predict_sliding_window_return_logits(data, prompt).to('cpu')
             else:
-                prediction += self.predict_sliding_window_return_logits(data).to('cpu')
+                prediction += self.predict_sliding_window_return_logits(data, prompt).to('cpu')
 
         if len(self.list_of_parameters) > 1:
             prediction /= len(self.list_of_parameters)
@@ -189,6 +191,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                                                        data: torch.Tensor,
                                                        slicers,
                                                        do_on_device: bool = True,
+                                                       prompt: str = ''
                                                        ):
         predicted_logits = n_predictions = prediction = gaussian = workon = None
         results_device = self.device if do_on_device else torch.device('cpu')
@@ -234,12 +237,38 @@ class nnUNetPredictor(baseNNUNetPredictor):
                         queue.task_done()
                         break
                     workon, sl = item
+
+                    # sub-extractor add workon and slicer as inputs.
+                    slicer_idx = pbar.n
+                    sub_extractor = NNExtractor(f'{prompt}-workon-{slicer_idx}')
+                    sub_extractor.add_inputs(
+                        name=f'workon-{slicer_idx}',
+                        data={'workon': workon, 'slicer': list(sl)},
+                    )
+
                     prediction = self._internal_maybe_mirror_and_predict(workon)[0].to(results_device)  # noqa
+
+                    # extractor add sub-extractor
+                    self.extractor.add_extractor(extractor=sub_extractor)
 
                     if self.use_gaussian:
                         prediction *= gaussian
                     predicted_logits[sl] += prediction
                     n_predictions[sl[1:]] += gaussian
+
+                    # self.extractor add postprocess for predicted-logits and n-predictions
+                    self.extractor.add_postprocess(
+                        name=f'workon-{slicer_idx}',
+                        data={
+                            'predicted_logits': predicted_logits,
+                            'n_predictions': n_predictions,
+                            'prediction': prediction,
+                            'gaussian': gaussian,
+                        },
+                    )
+
+                    sub_extractor.remove_hook()
+
                     queue.task_done()
                     pbar.update()
             queue.join()
@@ -259,7 +288,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
         return predicted_logits  # noqa
 
     @torch.inference_mode()
-    def predict_sliding_window_return_logits(self, input_image: torch.Tensor) \
+    def predict_sliding_window_return_logits(self, input_image: torch.Tensor, prompt: str) \
             -> Union[np.ndarray, torch.Tensor]:
         assert isinstance(input_image, torch.Tensor)
         self.network = self.network.to(self.device)
@@ -286,25 +315,56 @@ class nnUNetPredictor(baseNNUNetPredictor):
                                                        'constant', {'value': 0}, True,
                                                        None)
 
+            # extractor add preprocess: Pad
+            self.extractor.add_preprocess(
+                data={
+                    'img': Pad(img=data, slicer_revert_padding=slicer_revert_padding)
+                },
+            )
+
             slicers = self._internal_get_sliding_window_slicers(data.shape[1:])
 
             if self.perform_everything_on_device and self.device != 'cpu':
                 # we need to try except here because we can run OOM in which case we need to fall back to CPU as a results device  # noqa
                 try:
-                    predicted_logits = self._internal_predict_sliding_window_return_logits(data, slicers,  # noqa
-                                                                                           self.perform_everything_on_device)  # noqa
+                    predicted_logits = self._internal_predict_sliding_window_return_logits(
+                        data,
+                        slicers,
+                        self.perform_everything_on_device,
+
+                        prompt=prompt,
+                    )
                 except RuntimeError:
                     print(
                         'Prediction on device was unsuccessful, probably due to a lack of memory. Moving results arrays to CPU')  # noqa
                     empty_cache(self.device)
-                    predicted_logits = self._internal_predict_sliding_window_return_logits(data, slicers, False)  # noqa
+                    predicted_logits = self._internal_predict_sliding_window_return_logits(
+                        data,
+                        slicers,
+                        False,
+
+                        prompt=prompt,
+                    )
             else:
-                predicted_logits = self._internal_predict_sliding_window_return_logits(data, slicers,  # noqa
-                                                                                       self.perform_everything_on_device)  # noqa
+                predicted_logits = self._internal_predict_sliding_window_return_logits(
+                    data,
+                    slicers,
+                    self.perform_everything_on_device,
+
+                    prompt=prompt,
+                )
 
             empty_cache(self.device)
             # revert padding
-            predicted_logits = predicted_logits[(slice(None), *slicer_revert_padding[1:])]
+            the_slice = (slice(None), *slicer_revert_padding[1:])
+            predicted_logits = predicted_logits[the_slice]
+
+            # self.extractor revert padding.
+            self.extractor.add_postprocess(
+                name='revert-padding',
+                data={'predicted_logits': Crop(img=predicted_logits, region=the_slice)},
+            )
+
         return predicted_logits
 
 
