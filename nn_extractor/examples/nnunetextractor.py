@@ -97,7 +97,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
         img = dct['data'].detach().to('cpu').numpy()
         crop_region = properties_dict['bbox_used_for_cropping']
         self.extractor.add_preprocess(
-            name=nnextractor_name,
+            name=f'{nnextractor_name}-crop',
             data={'img': Crop(img=img, region=crop_region), 'props': properties_dict},
         )
 
@@ -395,6 +395,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
 
             # extractor add preprocess: Pad
             self.extractor.add_preprocess(
+                name=f'{prompt}-pad',
                 data={
                     'img': Pad(img=data, slicer_revert_padding=slicer_revert_padding)
                 },
