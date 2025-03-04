@@ -1,18 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from typing import TypedDict
-
 from . import cfg
 
 import time
 
-
-class ProfileValue(TypedDict):
-    start: int
-    diff: int
-    last_diff: int
-    count: int
-
+from .types import ProfileValue
 
 _PROFILE_POOL: dict[str, ProfileValue] = {}
 
@@ -50,11 +42,12 @@ def report(prompt='', is_last_diff_only=False):
         for idx, k in enumerate(keys):
             last_diff = _PROFILE_POOL[k]['last_diff']
             count = _PROFILE_POOL[k]['count']
-            cfg.logger.info(f'[PROFILE/{prompt}] ({idx} / {len(keys)}) {k}: last-diff: {last_diff} count: {count}')
+            cfg.logger.info(f'[PROFILE/{prompt}] ({idx} / {len(keys)}) {k}: last-diff: {last_diff} count: {count}')  # noqa
         return
 
     for idx, k in enumerate(keys):
         diff = _PROFILE_POOL[k]['diff']
         count = _PROFILE_POOL[k]['count']
         avg = float(diff) / float(count)
-        cfg.logger.info(f'[PROFILE/{prompt}] ({idx} / {len(keys)}) {k}: total: {diff} count: {count} avg: {avg:.03f}')
+        cfg.logger.info(
+            f'[PROFILE/{prompt}] ({idx} / {len(keys)}) {k}: total: {diff} count: {count} avg: {avg:.03f}')  # noqa

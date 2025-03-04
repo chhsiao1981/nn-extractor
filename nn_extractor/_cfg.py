@@ -95,6 +95,7 @@ def init(
         filename: str = '',
         log_name: str = '',
         log_filename: str = '',
+        default: Optional[dict] = None,
         extra_params: Optional[dict] = None,
         is_extra_params_in_file_ok: bool = True,
         is_skip_extra_params_in_file: bool = False,
@@ -143,6 +144,7 @@ def init(
     config = _init_config(name, config_from_file)
     config = _post_init_config(
         config,
+        default,
         extra_params,
         is_extra_params_in_file_ok,
         is_skip_extra_params_in_file,
@@ -279,8 +281,8 @@ def _is_valid_logger_section(section: str) -> bool:
 
 def _post_init_config(
         config: dict,
-        extra_params:
-        Optional[dict],
+        default: Optional[dict],
+        extra_params: Optional[dict],
         is_extra_params_in_file_ok: bool,
         is_skip_extra_params_in_file: bool,
         logger: logging.Logger,
@@ -289,20 +291,99 @@ def _post_init_config(
     add additional parameters into config
     '''
 
-    if not extra_params:
-        return config
+    if default is None:
+        default = {}
 
-    # warning if not is_extra_in_file_ok
-    if not is_extra_params_in_file_ok:
-        for k, v in extra_params.items():
-            if k in config:
-                logger.warning('config will be overwritten by extras: key: %s origin: %s new: %s', k, config[k], v)  # noqa
+    if extra_params is None:
+        extra_params = {}
 
-    # set valid extras, with is_skip_extra_in_file
-    valid_extras = extra_params
-    if is_skip_extra_params_in_file:
-        valid_extras = {k: v for k, v in extra_params if k not in config}
+    config = _merge_config(config, extra_params, logger=logger, is_exist_ok=is_extra_params_in_file_ok, is_skip_exist=is_skip_extra_params_in_file)
 
-    config.update(valid_extras)
+    config = _merge_config(default, config, logger=logger)
 
     return config
+
+
+def _merge_config(
+    orig_config: dict,
+    new_config: dict,
+    logger: logging.Logger,
+    is_exist_ok: bool = True,
+    is_skip_exist: bool = False,
+    prefix: str = '',
+) -> dict:
+    for key, val in new_config.items():
+        if key not in orig_config:
+            orig_config[key] = val
+            continue
+
+        new_val = _merge_val(orig_config[key], val, logger, is_exist_ok, is_skip_exist, key, prefix)
+
+        orig_config[key] = new_val
+
+    return orig_config
+
+
+def _merge_config_list(
+    orig_config: list,
+    new_config: list,
+    logger: logging.Logger,
+    is_exist_ok: bool,
+    is_skip_exist: bool,
+    prefix: str = '',
+) -> list:
+    n_to_merge = min(len(orig_config), len(new_config))
+    new_config_to_merge = new_config[:n_to_merge]
+    new_config_to_attach = new_config[n_to_merge:]
+
+    for idx, val in enumerate(new_config_to_merge):
+        new_val = _merge_val(orig_config[idx], val, logger, is_exist_ok, is_skip_exist, idx, prefix)
+        orig_config[idx] = new_val
+
+    return orig_config + new_config_to_attach
+
+
+def _merge_val(
+    orig_val: Any,
+    new_val: Any,
+    logger: logging.Logger,
+    is_exist_ok: bool,
+    is_skip_exist: bool,
+    key: str | int,
+    prefix: str,
+) -> Any:
+    full_key = f'{prefix}.{key}'
+
+    if not _is_same_type(new_val, orig_val):
+        replaced = new_val if is_skip_exist else orig_val
+        remain = orig_val if is_skip_exist else new_val
+        logger.warning(f'type is not the same: key: {full_key} replaced: {replaced} remain: {remain}')
+        return new_val
+
+    if isinstance(new_val, dict):
+        new_val = _merge_config(orig_val, new_val, logger, is_exist_ok=is_exist_ok, is_skip_exist=is_skip_exist, prefix=full_key)
+        return new_val
+
+    if isinstance(new_val, list):
+        new_val = _merge_config_list(orig_val, new_val, logger, is_exist_ok=is_exist_ok, is_skip_exist=is_skip_exist, prefix=full_key)
+        return new_val
+
+    replaced = new_val if is_skip_exist else orig_val
+    remain = orig_val if is_skip_exist else new_val
+
+    if not is_exist_ok:
+        prompt = 'config already exists' if is_skip_exist else 'config will be overwritten by extra params'
+        logger.warning(f'{prompt}: key: {full_key} replaced: {replaced} remain: {remain}')
+
+    return remain
+
+
+def _is_same_type(val: Any, other: Any) -> bool:
+    if isinstance(val, dict) and isinstance(other, dict):
+        return True
+    elif isinstance(val, list) and isinstance(other, list):
+        return True
+    elif not isinstance(val, dict) and not isinstance(other, dict) and not isinstance(val, list) and not isinstance(other, list):
+        return True
+
+    return False

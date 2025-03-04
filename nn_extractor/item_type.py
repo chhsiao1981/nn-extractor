@@ -23,33 +23,27 @@ class ItemType(Enum):
     OTHER = nnextractor_pb2.ItemType.I_OTHER
 
     '''
-    ndarray
-    Usually present the ndarray as:
-    * 1D: numbers
-    * 2D: image
-    * 3D: 3D - nii
-    * > 3D: have users select 3 dimenions and present as 3D nii,
-            and show the corresponding info in other dims.
+    nntensor
     '''
-    NDARRAY = nnextractor_pb2.ItemType.I_NDARRAY
+    NNTENSOR = nnextractor_pb2.ItemType.I_NNTENSOR
 
     '''
-    3D-nii
+    NII type (with origin, spacing, direction, affine)
     '''
     NII = nnextractor_pb2.ItemType.I_NII
 
     '''
-    2D-image
+    2D-image, as ndarray
     '''
     IMAGE = nnextractor_pb2.ItemType.I_IMAGE
 
     '''
-    audio (can be presented as sound, or time-domain presentation)
+    audio (can be presented as sound, or time-domain presentation), as ndarray
     '''
     AUDIO = nnextractor_pb2.ItemType.I_AUDIO
 
     '''
-    spectrogram
+    spectrogram, as ndarray
     '''
     SPECTROGRAM = nnextractor_pb2.ItemType.I_SPECTROGRAM
 
@@ -73,8 +67,52 @@ class ItemType(Enum):
     '''
     NULL = nnextractor_pb2.ItemType.I_NULL
 
+    '''
+    list of items
+    '''
+    LIST = nnextractor_pb2.ItemType.I_LIST
+
+    '''
+    map of items
+    '''
+    MAP = nnextractor_pb2.ItemType.I_MAP
+
+    '''
+    op-item
+    '''
+    OP_ITEM = nnextractor_pb2.ItemType.I_OP_ITEM
+
     def __int__(self) -> int:
         return self.value
 
     def __str__(self) -> str:
         return self.name.lower()
+
+
+_ITEM_NDARRAY_TYPE_SET = set([
+    ItemType.NNTENSOR,
+    ItemType.IMAGE,
+    ItemType.AUDIO,
+    ItemType.SPECTROGRAM,
+])
+
+_ITEM_SKIP_SAVE_FILE_TYPE_SET = set([
+    ItemType.UNSPECIFIED,
+    ItemType.RAW,
+    ItemType.OTHER,
+    ItemType.TEXT,
+    ItemType.NUMBER,
+    ItemType.TEXT_NUMBER,
+    ItemType.NULL,
+
+    ItemType.LIST,
+    ItemType.MAP,
+])
+
+
+def is_ndarray_type(the_type: ItemType) -> bool:
+    return the_type in _ITEM_NDARRAY_TYPE_SET
+
+
+def is_skip_save_file_type(the_type: ItemType) -> bool:
+    return the_type in _ITEM_SKIP_SAVE_FILE_TYPE_SET

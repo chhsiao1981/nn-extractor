@@ -13,11 +13,13 @@ dependencies = [
     'PyYAML==6.0.2',
     'protobuf==5.29.3',
     'pyarrow==19.0.0',
-    'nnunetv2 @ git+ssh://git@github.com/MIC-DKFZ/nnUNet#v2.5.1',
+    'fastapi[standard]==0.115.8',
+    'pydantic-settings==2.7.1',
+    'nnunetv2 @ git+ssh://git@github.com/MIC-DKFZ/nnUNet#v2.6.0',
 ]
 
 authors = [
-    # {name = '', email = ''},
+    {name = 'Chuan-Heng Hsiao', email = 'hsiao.chuanheng@gmail.com'},
 ]
 description = ''
 readme = 'README.md'
@@ -44,7 +46,9 @@ requires-python = ">= 3.10"
 # Changelog = ''
 
 [project.scripts]
-nnunet-extractor = 'nn_extractor.cmds.nnunetextractor:main'
+nnunet-extractor = 'nn_extractor.examples.nnunetextractor:predict_entry_point'
+
+gen-openapi = 'nn_extractor.server.gen_openapi:main'
 
 [tool.setuptools.packages.find]
 exclude = [
@@ -58,7 +62,7 @@ log_format      = "%(asctime)s [%(levelname)-5.5s] %(module)s#%(funcName)s@%(lin
 log_date_format = "%Y-%m-%d %H:%M:%S"
 
 [tool.flake8]
-max-line-length = 120
+max-line-length = 100
 extend-ignore = [
     # See https://github.com/PyCQA/pycodestyle/issues/373
     'E203',

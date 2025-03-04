@@ -9,6 +9,12 @@ is_nnnode_record_inputs = false
 
 is_profile = false
 
+[nn-extractor.server]
+root_dir = ''
+origins = [
+    '*',
+]
+
 [loggers]
 keys = 'root, nn_extractor'
 

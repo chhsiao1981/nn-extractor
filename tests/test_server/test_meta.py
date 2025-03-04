@@ -3,10 +3,10 @@
 import unittest
 import logging  # noqa
 
-from nn_extractor.cmds import nnunetextractor  # noqa
+from nn_extractor.server import meta  # noqa
 
 
-class TestNnunetextractor(unittest.TestCase):
+class TestMeta(unittest.TestCase):
 
     def setUp(self):
         pass
