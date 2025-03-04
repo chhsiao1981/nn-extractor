@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ex: ./scripts/run-nnunetextractor.sh /mnt/nnUNetv2 1 3d_fullre all /mnt/nnUNetv2/raw/Dataset001_BONBIDHIE/imagesTs /mnt/nnUNetv2/predicts/Dataset001_BONBIDHIE config.toml
+# ex: ./scripts/run-nnunetextractor.sh /mnt/nnUNetv2 1 3d_fullres all /mnt/nnUNetv2/raw/Dataset001_BONBIDHIE/imagesTs /mnt/nnUNetv2/predicts/Dataset001_BONBIDHIE config.toml
 
 if [ "$#" != 7 ]; then
     echo "usage: $0 [nnUNet_rootdir] [nnUNet_train_dataset] [nnUNet_config (3d_fullres)] [nnUNet_fold (1,2,3,4,5,all)] [input_dir] [nnUNet_output_dir] [nn-extractor config]"
