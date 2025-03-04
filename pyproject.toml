@@ -46,7 +46,7 @@ requires-python = ">= 3.10"
 # Changelog = ''
 
 [project.scripts]
-nnunet-extractor = 'nn_extractor.examples.nnunetextractor:main'
+nnunet-extractor = 'nn_extractor.examples.nnunetextractor:predict_entry_point'
 
 gen-openapi = 'nn_extractor.server.gen_openapi:main'
 
