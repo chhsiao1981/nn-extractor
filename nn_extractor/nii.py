@@ -36,15 +36,15 @@ class NII(object):
     def serialize_pb(self: Self) -> nnextractor_pb2.NII:
         serialized_tensor = nntensor.serialize_nntensor_pb(self.tensor)
         serialized_direction = list(itertools.chain.from_iterable(self.direction_ras))
-        affine = [] if self.affine_ras is None \
+        affine_ras = [] if self.affine_ras is None \
             else list(itertools.chain.from_iterable(self.affine_ras))
 
         return nnextractor_pb2.NII(
             tensor=serialized_tensor,
-            origin=self.origin_ras,
-            direction=serialized_direction,
-            spacing=self.spacing_ras,
-            affine=affine)
+            origin_ras=self.origin_ras,
+            direction_ras=serialized_direction,
+            spacing_ras=self.spacing_ras,
+            affine_ras=affine_ras)
 
     @classmethod
     def deserialize_pb(cls: Self, nii_pb: nnextractor_pb2.NII) -> Self:

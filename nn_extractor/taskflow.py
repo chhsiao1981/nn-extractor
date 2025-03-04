@@ -66,7 +66,7 @@ class Taskflow(object):
                     break
                 elif isinstance(item.value, NII):
                     self.op_type = OpType.AFFINE
-                    self.op_params = item.value.affine_ras
+                    self.op_params = RecursivePrimitive(item.value.affine_ras)
 
     def serialize(self: Self) -> nnextractor_pb2.Taskflow:
         to_serialize = {

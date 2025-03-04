@@ -103,7 +103,10 @@ class nnUNetPredictor(baseNNUNetPredictor):
 
         if self.verbose:
             print('predicting')
-        predicted_logits = self.predict_logits_from_preprocessed_data(dct['data']).cpu()
+        predicted_logits = self.predict_logits_from_preprocessed_data(
+            data=dct['data'],
+            nnextractor_name=nnextractor_name,
+        ).cpu()
 
         if self.verbose:
             print('resampling to original shape')
@@ -231,6 +234,10 @@ class nnUNetPredictor(baseNNUNetPredictor):
 
                 # add each-prediction for sub-extractor
                 each_prediction = self.network(each_flipped_x)
+
+                # sub-extractor forward snapshot
+                sub_extractor.forward_snapshot()
+
                 unflipped_prediction = torch.flip(each_prediction, axes)
                 prediction += unflipped_prediction
 
@@ -317,7 +324,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                         data={'workon': workon, 'slicer': list(sl)},
                     )
 
-                    prediction = self._internal_maybe_mirror_and_predict(workon)[0].to(results_device)  # noqa
+                    prediction = self._internal_maybe_mirror_and_predict(workon, sub_extractor)[0].to(results_device)  # noqa
 
                     # extractor add sub-extractor
                     self.extractor.add_extractor(extractor=sub_extractor)
