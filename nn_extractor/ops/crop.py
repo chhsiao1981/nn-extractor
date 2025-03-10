@@ -24,7 +24,7 @@ class Crop(BaseOp):
 
     cropping region, the length need be aligned with img.ndim
     '''
-    region: list[slice | tuple[Optional[int], Optional[int], Optional[int]] | list[Optional[int]]]
+    region: list[int | slice | tuple[Optional[int], Optional[int], Optional[int]]]
 
     def integrate(self: Self, name: str) -> Optional[OpItem]:
         img = self.img
