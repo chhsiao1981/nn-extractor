@@ -338,10 +338,11 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     self.extractor.add_postprocess(
                         name=f'workon-{slicer_idx}',
                         data={
-                            'predicted_logits': Pad(img=predicted_logits, slicer_revert_padding=list(sl)),
-                            'n_predictions': n_predictions,
+                            # requiring prediction and gaussian before predicted_logits as correct order of affine.
                             'prediction': prediction,
                             'gaussian': gaussian,
+                            'predicted_logits': Pad(img=predicted_logits, slicer_revert_padding=list(sl)),
+                            'n_predictions': n_predictions,
                         },
                     )
 
