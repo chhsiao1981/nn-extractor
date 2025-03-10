@@ -102,4 +102,5 @@ class OpItem(object):
             op_type=str(self.op_type),
             tensor=meta_tensor,
             op_params=meta_op_params,
+            data_id=self.data_id,
         )
