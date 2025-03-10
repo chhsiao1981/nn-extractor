@@ -45,6 +45,7 @@ class MetaOpItem(TypedDict):
     op_type: str
     tensor: MetaNNTensor
     op_params: MetaRecursivePrimitive
+    data_id: str
 
 
 class MetaNNRecordMeta(TypedDict):
