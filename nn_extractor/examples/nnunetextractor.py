@@ -321,7 +321,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     sub_extractor = NNExtractor(f'{prompt}-workon-{slicer_idx}')
                     sub_extractor.add_inputs(
                         name=f'workon-{slicer_idx}',
-                        data={'workon': workon, 'slicer': list(sl)},
+                        data={'workon': Crop(img=workon, region=list(sl)), 'slicer': list(sl)},
                     )
 
                     prediction = self._internal_maybe_mirror_and_predict(workon, sub_extractor)[0].to(results_device)  # noqa
@@ -338,7 +338,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     self.extractor.add_postprocess(
                         name=f'workon-{slicer_idx}',
                         data={
-                            'predicted_logits': predicted_logits,
+                            'predicted_logits': Pad(img=predicted_logits, slicer_revert_padding=list(sl)),
                             'n_predictions': n_predictions,
                             'prediction': prediction,
                             'gaussian': gaussian,
