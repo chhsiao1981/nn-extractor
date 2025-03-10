@@ -25,8 +25,11 @@ def prepend_list[T](
 
 
 def sanitize_slice(
-    the_slice: slice | tuple[Optional[int], Optional[int], Optional[int]] | list[Optional[int]]  # noqa
+    the_slice: int | slice | tuple[Optional[int], Optional[int], Optional[int]] | list[Optional[int]]  # noqa
 ) -> Optional[slice]:
+    if isinstance(the_slice, int):
+        # retaining the result as int as indication to reduce dimension.
+        return the_slice
     if isinstance(the_slice, slice):
         return the_slice
 

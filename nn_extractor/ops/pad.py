@@ -25,7 +25,7 @@ class Pad(BaseOp):
     reverse padding (as cropping, img[slicer_revert_padding] to pre-padding img),
     the length need be aligned with img.ndim.
     '''
-    slicer_revert_padding: list[slice | tuple[Optional[int], Optional[int], Optional[int]] | list[Optional[int]]]  # noqa
+    slicer_revert_padding: list[int | slice | tuple[Optional[int], Optional[int], Optional[int]]]  # noqa
 
     def integrate(self: Self, name: str) -> Optional[OpItem]:
         img: NNTensor = self.img
