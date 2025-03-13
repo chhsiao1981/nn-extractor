@@ -126,12 +126,15 @@ class nnUNetPredictor(baseNNUNetPredictor):
             self.extractor.save()
 
         else:
-            ret = export_prediction.convert_predicted_logits_to_segmentation_with_correct_shape(predicted_logits, self.plans_manager,  # noqa
-                                                                              self.configuration_manager,  # noqa
-                                                                              self.label_manager,
-                                                                              dct['data_properties'],  # noqa
-                                                                              return_probabilities=  # fmt: off  # noqa
-                                                                              save_or_return_probabilities)  # noqa
+            ret = export_prediction.convert_predicted_logits_to_segmentation_with_correct_shape(
+                predicted_logits, self.plans_manager,
+                self.configuration_manager,
+                self.label_manager,
+                dct['data_properties'],
+                return_probabilities=save_or_return_probabilities,
+
+                extractor=self.extractor,
+            )
             export_prediction.extractor_add_postprocess(
                 predicted_array_or_file=predicted_logits,
                 properties_dict=properties_dict,
