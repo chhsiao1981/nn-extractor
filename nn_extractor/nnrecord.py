@@ -2,6 +2,7 @@
 
 from enum import Enum
 from dataclasses import dataclass
+import pickle
 from typing import Self, Any, Optional
 
 import os
@@ -203,6 +204,7 @@ class NNRecord(object):
             return
         elif self.the_type == NNRecordType.ARRAY:
             self.save_to_file_pb(seq_dir)
+            self.save_to_file_pk(seq_dir)
         elif self.the_type == NNRecordType.OP_ITEM:
             self.value.save_to_file(seq_dir)
 
@@ -220,3 +222,20 @@ class NNRecord(object):
             serialized_bytes = serialized.SerializeToString()
             serialized_str = base64.b64encode(serialized_bytes)
             f.write(serialized_str)
+
+    def save_to_file_pk(self: Self, seq_dir: str):
+        if not cfg.config['is_save_to_file_pk']:
+            return
+
+        filename = f'{self.data_id}.pk'
+
+        out_filename = os.sep.join([cfg.config['output_dir'], seq_dir, filename])
+
+        utils.ensure_dir(out_filename)
+        with open(out_filename, 'wb') as f:
+            pickle.dump({
+                'name': self.name,
+                'value': self.value,
+                'the_type': self.the_type,
+                'data_id': self.data_id,
+            }, f)

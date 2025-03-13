@@ -7,7 +7,7 @@ from typing import Optional, Self, Union
 
 from pydantic import BaseModel, Field
 
-from nn_extractor import argparse, cfg, nii
+from nn_extractor import argparse, cfg, nii, utils
 import nn_extractor
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.crop import Crop
@@ -22,9 +22,6 @@ from tqdm import tqdm
 
 from nnunetv2.configuration import default_num_processes
 from nnunetv2.imageio.simpleitk_reader_writer import SimpleITKIO
-from nnunetv2.inference.data_iterators import PreprocessAdapterFromNpy
-from nnunetv2.inference.export_prediction import \
-    convert_predicted_logits_to_segmentation_with_correct_shape
 from nnunetv2.inference.sliding_window_prediction import compute_gaussian
 from nnunetv2.utilities.file_path_utilities import get_output_folder
 from nnunetv2.utilities.helpers import empty_cache, dummy_context
@@ -33,6 +30,7 @@ from nnunetv2.utilities.utils import create_lists_from_splitted_dataset_folder
 from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor as baseNNUNetPredictor
 
 from . import export_prediction
+from . data_iterators import PreprocessAdapterFromNpy
 
 
 class nnUNetPredictor(baseNNUNetPredictor):
@@ -84,10 +82,18 @@ class nnUNetPredictor(baseNNUNetPredictor):
             },
         )
 
-        ppa = PreprocessAdapterFromNpy([input_image], [segmentation_previous_stage], [image_properties],  # noqa
-                                       [output_file_truncated],
-                                       self.plans_manager, self.dataset_json, self.configuration_manager,  # noqa
-                                       num_threads_in_multithreaded=1, verbose=self.verbose)
+        ppa = PreprocessAdapterFromNpy(
+            [input_image],
+            [segmentation_previous_stage],
+            [image_properties],
+            [output_file_truncated],
+            self.plans_manager, self.dataset_json,
+            self.configuration_manager,
+            num_threads_in_multithreaded=1,
+            verbose=self.verbose,
+
+            extractor=self.extractor,
+        )
         if self.verbose:
             print('preprocessing')
         dct = next(ppa)
@@ -95,10 +101,9 @@ class nnUNetPredictor(baseNNUNetPredictor):
         # self.extractor add dct.data and dct.data_properties in preprocess.
         properties_dict = dct['data_properties']
         img = dct['data'].detach().to('cpu').numpy()
-        crop_region = properties_dict['bbox_used_for_cropping']
         self.extractor.add_preprocess(
-            name=f'{nnextractor_name}-crop',
-            data={'img': Crop(img=img, region=crop_region), 'props': properties_dict},
+            name=f'after-crop-spacing',
+            data={'img': img, 'props': properties_dict},
         )
 
         if self.verbose:
@@ -129,15 +134,16 @@ class nnUNetPredictor(baseNNUNetPredictor):
             self.extractor.save()
 
         else:
-            ret = convert_predicted_logits_to_segmentation_with_correct_shape(predicted_logits, self.plans_manager,  # noqa
-                                                                              self.configuration_manager,  # noqa
-                                                                              self.label_manager,
-                                                                              dct['data_properties'],  # noqa
-                                                                              return_probabilities=  # fmt: off  # noqa
-                                                                              save_or_return_probabilities)  # noqa
+            ret = export_prediction.convert_predicted_logits_to_segmentation_with_correct_shape(
+                predicted_logits, self.plans_manager,
+                self.configuration_manager,
+                self.label_manager,
+                dct['data_properties'],
+                return_probabilities=save_or_return_probabilities,
+
+                extractor=self.extractor,
+            )
             export_prediction.extractor_add_postprocess(
-                predicted_array_or_file=predicted_logits,
-                properties_dict=properties_dict,
                 plans_manager=self.plans_manager,
                 save_probabilities=save_or_return_probabilities,
                 ret=ret,
@@ -229,7 +235,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 # sub-extractor add-preprocess
                 sub_extractor.add_preprocess(
                     name=f'mirror-flip-{idx}',
-                    data={'flipped': Flip(img=each_flipped_x, axes=axes)},
+                    data={'flipped': Flip(img=each_flipped_x, axes_sar=axes)},
                 )
 
                 # add each-prediction for sub-extractor
@@ -246,7 +252,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     name=f'mirror-unflip-{idx}',
                     data={
                         'each_prediction': each_prediction,
-                        'unflipped': Flip(img=unflipped_prediction, axes=axes),
+                        'unflipped': Flip(img=unflipped_prediction, axes_sar=axes),
                         'prediction': prediction,
                     },
                 )
@@ -274,9 +280,9 @@ class nnUNetPredictor(baseNNUNetPredictor):
         predicted_logits = n_predictions = prediction = gaussian = workon = None
         results_device = self.device if do_on_device else torch.device('cpu')
 
-        def producer(d, slh, q):
+        def producer(d: torch.Tensor, slh: list[slice], q: Queue):
             for s in slh:
-                q.put((torch.clone(d[s][None], memory_format=torch.contiguous_format).to(self.device), s))  # noqa
+                q.put((torch.clone(d[s][None], memory_format=torch.contiguous_format).to(self.device), d.shape, s))  # noqa
             q.put('end')
 
         try:
@@ -314,17 +320,22 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     if item == 'end':
                         queue.task_done()
                         break
-                    workon, sl = item
+                    workon, orig_shape, sl = item
 
                     # sub-extractor add workon and slicer as inputs.
                     slicer_idx = pbar.n
                     sub_extractor = NNExtractor(f'{prompt}-workon-{slicer_idx}')
+                    region_sar = utils.slice_spl_to_sar(sl, orig_shape)
                     sub_extractor.add_inputs(
                         name=f'workon-{slicer_idx}',
-                        data={'workon': Crop(img=workon, region=list(sl)), 'slicer': list(sl)},
+                        data={
+                            'workon': Crop(img=workon, region_sar=region_sar),
+                            'region_sar': region_sar,
+                        },
                     )
 
-                    prediction = self._internal_maybe_mirror_and_predict(workon, sub_extractor)[0].to(results_device)  # noqa
+                    prediction = self._internal_maybe_mirror_and_predict(
+                        workon, sub_extractor,)[0].to(results_device)
 
                     # extractor add sub-extractor
                     self.extractor.add_extractor(extractor=sub_extractor)
@@ -335,13 +346,18 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     n_predictions[sl[1:]] += gaussian
 
                     # self.extractor add postprocess for predicted-logits and n-predictions
+                    slicer_revert_padding_sar = utils.slice_spl_to_sar(sl, predicted_logits.shape)
                     self.extractor.add_postprocess(
                         name=f'workon-{slicer_idx}',
                         data={
                             # requiring prediction and gaussian before predicted_logits as correct order of affine.
                             'prediction': prediction,
                             'gaussian': gaussian,
-                            'predicted_logits': Pad(img=predicted_logits, slicer_revert_padding=list(sl)),
+                            'predicted_logits': Pad(
+                                img=predicted_logits,
+                                slicer_revert_padding_sar=slicer_revert_padding_sar,
+                            ),
+                            'slicer_revert_padding_sar': slicer_revert_padding_sar,
                             'n_predictions': n_predictions,
                         },
                     )
@@ -390,15 +406,24 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 print("mirror_axes:", self.allowed_mirroring_axes if self.use_mirroring else None)
 
             # if input_image is smaller than tile_size we need to pad it to tile_size.
-            data, slicer_revert_padding = pad_nd_image(input_image, self.configuration_manager.patch_size,  # noqa
-                                                       'constant', {'value': 0}, True,
-                                                       None)
+            data, slicer_revert_padding = pad_nd_image(
+                input_image,
+                self.configuration_manager.patch_size,
+                'constant',
+                {'value': 0},
+                True,
+                None)
 
             # extractor add preprocess: Pad
+            slicer_revert_padding_sar = utils.slice_spl_to_sar(slicer_revert_padding, data.shape)
             self.extractor.add_preprocess(
                 name=f'{prompt}-pad',
                 data={
-                    'img': Pad(img=data, slicer_revert_padding=slicer_revert_padding)
+                    'img': Pad(
+                        img=data,
+                        slicer_revert_padding_sar=slicer_revert_padding_sar,
+                    ),
+                    'slicer_revert_padding_sar': slicer_revert_padding_sar,
                 },
             )
 
@@ -437,12 +462,20 @@ class nnUNetPredictor(baseNNUNetPredictor):
             empty_cache(self.device)
             # revert padding
             the_slice = (slice(None), *slicer_revert_padding[1:])
+            orig_predicted_logits = predicted_logits
             predicted_logits = predicted_logits[the_slice]
 
             # self.extractor revert padding.
+            region_sar = utils.slice_spl_to_sar(the_slice, orig_predicted_logits.shape)
             self.extractor.add_postprocess(
                 name='revert-padding',
-                data={'predicted_logits': Crop(img=predicted_logits, region=the_slice)},
+                data={
+                    'predicted_logits': Crop(
+                        img=predicted_logits,
+                        region_sar=region_sar,
+                    ),
+                    'region_sar': region_sar,
+                },
             )
 
         return predicted_logits

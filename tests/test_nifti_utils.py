@@ -3,10 +3,10 @@
 import unittest
 import logging  # noqa
 
-from nn_extractor.ops import utils  # noqa
+from nn_extractor import nifti_utils  # noqa
 
 
-class TestUtils(unittest.TestCase):
+class TestNiftiUtils(unittest.TestCase):
 
     def setUp(self):
         pass
