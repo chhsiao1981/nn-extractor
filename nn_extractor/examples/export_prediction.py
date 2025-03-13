@@ -145,8 +145,15 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
 
     label_manager = plans_manager.get_label_manager(dataset_json_dict_or_file)
     ret = convert_predicted_logits_to_segmentation_with_correct_shape(
-        predicted_array_or_file, plans_manager, configuration_manager, label_manager, properties_dict,  # noqa
-        return_probabilities=save_probabilities, num_threads_torch=num_threads_torch
+        predicted_array_or_file,
+        plans_manager,
+        configuration_manager,
+        label_manager,
+        properties_dict,
+        return_probabilities=save_probabilities,
+        num_threads_torch=num_threads_torch,
+
+        extractor=extractor,
     )
 
     # extractor add postprocess
