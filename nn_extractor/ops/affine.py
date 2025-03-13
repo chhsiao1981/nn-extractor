@@ -24,31 +24,31 @@ class Affine(BaseOp):
 
     affine matrix, 4x4.
     '''
-    affine: list[list[Primitive]]
+    affine_ras: list[list[Primitive]]
 
     def integrate(self: Self, name: str) -> Optional[OpItem]:
         img = self.img
-        affine = self.affine
+        affine_ras = self.affine_ras
 
         if not nntensor.isinstance_nntensor(img):
             cfg.logger.warning(f'affine.integrate: img is not nntensor: {type(img)}')
             return None
 
         # ensure region as slice
-        sanitized_affine = self._sanitize_affine(affine)
-        for each in sanitized_affine:
+        sanitized_affine_ras = self._sanitize_affine_ras(affine_ras)
+        for each in sanitized_affine_ras:
             if each is None:
-                cfg.logger.warning(f'affine.integrate: invalid affine: affine: {affine}')  # noqa
+                cfg.logger.warning(f'affine.integrate: invalid affine_ras: affine_ras: {affine_ras}')  # noqa
                 return None
 
         return OpItem(
             name=name,
             op_type=OpType.AFFINE,
             tensor=img,
-            op_params=sanitized_affine,
+            op_params=sanitized_affine_ras,
         )
 
-    def _sanitize_affine(
+    def _sanitize_affine_ras(
         self: Self,
         affine: list[list[Primitive]],
     ) -> Optional[list[list[Primitive]]]:
