@@ -22,7 +22,6 @@ from tqdm import tqdm
 
 from nnunetv2.configuration import default_num_processes
 from nnunetv2.imageio.simpleitk_reader_writer import SimpleITKIO
-from nnunetv2.inference.data_iterators import PreprocessAdapterFromNpy
 from nnunetv2.inference.sliding_window_prediction import compute_gaussian
 from nnunetv2.utilities.file_path_utilities import get_output_folder
 from nnunetv2.utilities.helpers import empty_cache, dummy_context
@@ -31,6 +30,7 @@ from nnunetv2.utilities.utils import create_lists_from_splitted_dataset_folder
 from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor as baseNNUNetPredictor
 
 from . import export_prediction
+from . data_iterators import PreprocessAdapterFromNpy
 
 
 class nnUNetPredictor(baseNNUNetPredictor):
@@ -82,10 +82,18 @@ class nnUNetPredictor(baseNNUNetPredictor):
             },
         )
 
-        ppa = PreprocessAdapterFromNpy([input_image], [segmentation_previous_stage], [image_properties],  # noqa
-                                       [output_file_truncated],
-                                       self.plans_manager, self.dataset_json, self.configuration_manager,  # noqa
-                                       num_threads_in_multithreaded=1, verbose=self.verbose)
+        ppa = PreprocessAdapterFromNpy(
+            [input_image],
+            [segmentation_previous_stage],
+            [image_properties],
+            [output_file_truncated],
+            self.plans_manager, self.dataset_json,
+            self.configuration_manager,
+            num_threads_in_multithreaded=1,
+            verbose=self.verbose,
+
+            extractor=self.extractor,
+        )
         if self.verbose:
             print('preprocessing')
         dct = next(ppa)
