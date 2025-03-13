@@ -2,6 +2,8 @@ from typing import Optional, Self, Union, List
 
 import numpy as np
 
+from batchgenerators.dataloading.data_loader import DataLoader
+
 from nnunetv2.preprocessing.preprocessors.default_preprocessor import DefaultPreprocessor as orig_DefaultPreprocessor
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, ConfigurationManager
 from nnunetv2.inference.data_iterators import PreprocessAdapterFromNpy as orig_PreprocessAdapterFromNpy
@@ -52,7 +54,8 @@ class PreprocessAdapterFromNpy(orig_PreprocessAdapterFromNpy):
         if truncated_ofnames is None:
             truncated_ofnames = [None] * len(list_of_images)
 
-        super().__init__(
+        DataLoader.__init__(
+            self,
             list(zip(list_of_images, list_of_segs_from_prev_stage,
                  list_of_image_properties, truncated_ofnames)),
             1, num_threads_in_multithreaded,
