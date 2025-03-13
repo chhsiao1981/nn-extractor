@@ -45,7 +45,7 @@ class Spacing(BaseOp):
 
         return OpItem(
             name=name,
-            op_type=OpType.CROP,
+            op_type=OpType.SPACING,
             tensor=img,
             op_params=spacing_ras,
         )
