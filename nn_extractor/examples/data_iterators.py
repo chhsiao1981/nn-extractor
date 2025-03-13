@@ -31,14 +31,17 @@ class PreprocessAdapterFromNpy(orig_PreprocessAdapterFromNpy):
         self.extractor = extractor
 
         # extractor: replace nnunetv2.DefaultPreprocessor to DefaultPreprocessor with extractor.
-        if isinstance(configuration_manager.preprocessor_class, orig_DefaultPreprocessor):
+        preprocessor = None
+        if configuration_manager.preprocessor_class == orig_DefaultPreprocessor:
             cfg.logger.info('PreprocessAdapterFromNpy: to replace DefaultPreprocessor to DefaultPreprocessor with extractor.')  # noqa
-            configuration_manager.preprocessor_class = DefaultPreprocessor
+            preprocessor = DefaultPreprocessor(verbose=verbose, extractor=extractor)
+        else:
+            cfg.logger.info(f'PreprocessAdapterFromNpy: to remain original configuration_manager.preprocessor_class: {configuration_manager.preprocessor_class}')  # noqa
+            preprocessor = configuration_manager.preprocessor_class(
+                verbose=verbose,
+                extractor=extractor,
+            )
 
-        preprocessor = configuration_manager.preprocessor_class(
-            verbose=verbose,
-            extractor=extractor,
-        )
         self.preprocessor, self.plans_manager, self.configuration_manager, self.dataset_json, self.truncated_ofnames = \
             preprocessor, plans_manager, configuration_manager, dataset_json, truncated_ofnames
 
