@@ -43,3 +43,29 @@ Given a deep neural network model and an input, the extracted information can be
 * Output: the outputs.
 * (Sub-)extractor: The recursive sub-extractors for sub-tasks.
 * Taskflow: The sequence of the task-flow.
+
+## Geometrical Operators
+
+Currently this extractor focuses on 3D-geometric alignment with the input images.
+
+Because of the convention by nii format (`RAS+`, but volume is represented as column-major,
+as `[S, A, R]`),
+anything related to affine / origin / spacing / direction is with RAS+ coordinate system,
+and others are with SAR+ coordinate system.
+
+We have the following geometric operators:
+
+* affine (in RAS+): setting affine matrix for current operation. still need to consider the contextual affine matrix.
+* abs_affine (in RAS+): setting the absolute affine matrix. The contextual affine matrix is reset to this abs_affine as well.
+* crop (in SAR+): cropping, usually means change of origin.
+* direction (in RAS+): direction, as nifti term for rotation.
+* flip (in SAR+): flipping axes.
+* geo_identity: identity matrix. The contextual affine matrix is reset to identity as well.
+* origin (in RAS+): origin, as nifti term for translation.
+* pad (in SAR+): padding, inverse operation of cropping.
+* spacing (in RAS+): spacing, as nifti term for scaling.
+
+## Incorporating into the Model.
+
+* Currently this extractor focuses on 3D-geometric alignment. Adding geometrical operators may change the context of the 3D-geometry mapping. It is better to keep track of the context of the 3D-geometry when adding geometrical operators.
+* Recording same operation with same parameter should be in the same record (ex: putting `seg` and `prob` as the same record in `convert_predicted_logits_to_segmentation_with_correct_shape`). The frontend should pick the 1st geometrical operation as the representation of the affine in that record.
