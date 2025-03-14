@@ -2,7 +2,7 @@ from typing import Any, Optional, Union
 
 import copy
 
-from nn_extractor import nii
+from nn_extractor import nii, utils
 from nn_extractor.nii import NII
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.pad import Pad
@@ -83,7 +83,9 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
     revert_cropping_data = {
         'seg': Pad(
             img=segmentation_reverted_cropping,
-            slicer_revert_padding_sar=properties_dict['bbox_used_for_cropping'],
+            slicer_revert_padding_sar=utils.slice_spl_to_sar(
+                properties_dict['bbox_used_for_cropping']
+            ),
         )
     }
 
@@ -101,7 +103,9 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
         # extractor: revert cropping
         revert_cropping_data['prob'] = Pad(
             img=predicted_probabilities,
-            slicer_revert_padding_sar=properties_dict['bbox_used_for_cropping']
+            slicer_revert_padding_sar=utils.slice_spl_to_sar(
+                properties_dict['bbox_used_for_cropping']
+            ),
         )
 
         # revert transpose

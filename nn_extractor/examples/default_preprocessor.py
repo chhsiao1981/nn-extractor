@@ -34,6 +34,7 @@ from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, Config
 from nnunetv2.utilities.utils import get_filenames_of_train_images_and_targets
 from nnunetv2.preprocessing.preprocessors.default_preprocessor import DefaultPreprocessor as orig_DefaultPreprocessor
 
+from nn_extractor import utils
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.crop import Crop
 from nn_extractor.ops.spacing import Spacing
@@ -84,9 +85,12 @@ class DefaultPreprocessor(orig_DefaultPreprocessor):
         properties['shape_after_cropping_and_before_resampling'] = data.shape[1:]
 
         # self.extractor: add crop data in preprocess.
-        crop_data = {'img': Crop(img=data, region_sar=bbox), 'props': properties}
+        crop_data = {
+            'img': Crop(img=data, region_sar=utils.slice_spl_to_sar(bbox)),
+            'props': properties,
+        }
         if has_seg:
-            crop_data['seg'] = Crop(img=seg, region_sar=bbox)
+            crop_data['seg'] = Crop(img=seg, region_sar=utils.slice_spl_to_sar(bbox))
 
         self.extractor.add_preprocess(
             name=f'crop-img',

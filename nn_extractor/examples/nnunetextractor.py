@@ -7,7 +7,7 @@ from typing import Optional, Self, Union
 
 from pydantic import BaseModel, Field
 
-from nn_extractor import argparse, cfg, nii
+from nn_extractor import argparse, cfg, nii, utils
 import nn_extractor
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.crop import Crop
@@ -329,10 +329,13 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     sub_extractor = NNExtractor(f'{prompt}-workon-{slicer_idx}')
                     sub_extractor.add_inputs(
                         name=f'workon-{slicer_idx}',
-                        data={'workon': Crop(img=workon, region_sar=list(sl)), 'slicer': list(sl)},
+                        data={
+                            'workon': Crop(img=workon, region_sar=utils.slice_spl_to_sar(sl)),
+                        },
                     )
 
-                    prediction = self._internal_maybe_mirror_and_predict(workon, sub_extractor)[0].to(results_device)  # noqa
+                    prediction = self._internal_maybe_mirror_and_predict(
+                        workon, sub_extractor,)[0].to(results_device)
 
                     # extractor add sub-extractor
                     self.extractor.add_extractor(extractor=sub_extractor)
@@ -349,7 +352,10 @@ class nnUNetPredictor(baseNNUNetPredictor):
                             # requiring prediction and gaussian before predicted_logits as correct order of affine.
                             'prediction': prediction,
                             'gaussian': gaussian,
-                            'predicted_logits': Pad(img=predicted_logits, slicer_revert_padding_sar=list(sl)),
+                            'predicted_logits': Pad(
+                                img=predicted_logits,
+                                slicer_revert_padding_sar=utils.slice_spl_to_sar(sl),
+                            ),
                             'n_predictions': n_predictions,
                         },
                     )
@@ -398,15 +404,22 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 print("mirror_axes:", self.allowed_mirroring_axes if self.use_mirroring else None)
 
             # if input_image is smaller than tile_size we need to pad it to tile_size.
-            data, slicer_revert_padding = pad_nd_image(input_image, self.configuration_manager.patch_size,  # noqa
-                                                       'constant', {'value': 0}, True,
-                                                       None)
+            data, slicer_revert_padding = pad_nd_image(
+                input_image,
+                self.configuration_manager.patch_size,
+                'constant',
+                {'value': 0},
+                True,
+                None)
 
             # extractor add preprocess: Pad
             self.extractor.add_preprocess(
                 name=f'{prompt}-pad',
                 data={
-                    'img': Pad(img=data, slicer_revert_padding_sar=slicer_revert_padding)
+                    'img': Pad(
+                        img=data,
+                        slicer_revert_padding_sar=utils.slice_spl_to_sar(slicer_revert_padding),
+                    ),
                 },
             )
 
@@ -450,7 +463,12 @@ class nnUNetPredictor(baseNNUNetPredictor):
             # self.extractor revert padding.
             self.extractor.add_postprocess(
                 name='revert-padding',
-                data={'predicted_logits': Crop(img=predicted_logits, region_sar=the_slice)},
+                data={
+                    'predicted_logits': Crop(
+                        img=predicted_logits,
+                        region_sar=utils.slice_spl_to_sar(the_slice),
+                    ),
+                },
             )
 
         return predicted_logits
