@@ -80,14 +80,16 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
         segmentation_reverted_cropping = segmentation_reverted_cropping.cpu().numpy()
 
     # extractor: revert cropping
+    slicer_revert_padding_sar = utils.slice_spl_to_sar(
+        properties_dict['bbox_used_for_cropping'],
+        segmentation_reverted_cropping.shape,
+    )
     revert_cropping_data = {
         'seg': Pad(
             img=segmentation_reverted_cropping,
-            slicer_revert_padding_sar=utils.slice_spl_to_sar(
-                properties_dict['bbox_used_for_cropping'],
-                segmentation_reverted_cropping.shape,
-            ),
-        )
+            slicer_revert_padding_sar=slicer_revert_padding_sar,
+        ),
+        'slicer_revert_padding_sar': slicer_revert_padding_sar,
     }
 
     # revert transpose

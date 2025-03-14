@@ -327,10 +327,12 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     # sub-extractor add workon and slicer as inputs.
                     slicer_idx = pbar.n
                     sub_extractor = NNExtractor(f'{prompt}-workon-{slicer_idx}')
+                    region_sar = utils.slice_spl_to_sar(sl, orig_shape)
                     sub_extractor.add_inputs(
                         name=f'workon-{slicer_idx}',
                         data={
-                            'workon': Crop(img=workon, region_sar=utils.slice_spl_to_sar(sl, orig_shape)),
+                            'workon': Crop(img=workon, region_sar=region_sar),
+                            'region_sar': region_sar,
                         },
                     )
 
@@ -346,6 +348,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     n_predictions[sl[1:]] += gaussian
 
                     # self.extractor add postprocess for predicted-logits and n-predictions
+                    slicer_revert_padding_sar = utils.slice_spl_to_sar(sl, predicted_logits.shape)
                     self.extractor.add_postprocess(
                         name=f'workon-{slicer_idx}',
                         data={
@@ -354,9 +357,9 @@ class nnUNetPredictor(baseNNUNetPredictor):
                             'gaussian': gaussian,
                             'predicted_logits': Pad(
                                 img=predicted_logits,
-                                slicer_revert_padding_sar=utils.slice_spl_to_sar(
-                                    sl, predicted_logits.shape),
+                                slicer_revert_padding_sar=slicer_revert_padding_sar,
                             ),
+                            'slicer_revert_padding_sar': slicer_revert_padding_sar,
                             'n_predictions': n_predictions,
                         },
                     )
@@ -414,14 +417,15 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 None)
 
             # extractor add preprocess: Pad
+            slicer_revert_padding_sar = utils.slice_spl_to_sar(slicer_revert_padding, data.shape)
             self.extractor.add_preprocess(
                 name=f'{prompt}-pad',
                 data={
                     'img': Pad(
                         img=data,
-                        slicer_revert_padding_sar=utils.slice_spl_to_sar(
-                            slicer_revert_padding, data.shape),
+                        slicer_revert_padding_sar=slicer_revert_padding_sar,
                     ),
+                    'slicer_revert_padding_sar': slicer_revert_padding_sar,
                 },
             )
 
@@ -464,13 +468,15 @@ class nnUNetPredictor(baseNNUNetPredictor):
             predicted_logits = predicted_logits[the_slice]
 
             # self.extractor revert padding.
+            region_sar = utils.slice_spl_to_sar(the_slice, orig_predicted_logits.shape)
             self.extractor.add_postprocess(
                 name='revert-padding',
                 data={
                     'predicted_logits': Crop(
                         img=predicted_logits,
-                        region_sar=utils.slice_spl_to_sar(the_slice, orig_predicted_logits.shape),
+                        region_sar=region_sar,
                     ),
+                    'region_sar': region_sar,
                 },
             )
 

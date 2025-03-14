@@ -87,14 +87,16 @@ class DefaultPreprocessor(orig_DefaultPreprocessor):
         properties['shape_after_cropping_and_before_resampling'] = data.shape[1:]
 
         # self.extractor: add crop data in preprocess.
+        region_sar = utils.slice_spl_to_sar(bbox, orig_data.shape)
         crop_data = {
-            'img': Crop(img=data, region_sar=utils.slice_spl_to_sar(bbox, orig_data.shape)),
+            'img': Crop(img=data, region_sar=region_sar),
             'props': properties,
+            'region_sar': region_sar,
         }
         if has_seg:
             crop_data['seg'] = Crop(
                 img=seg,
-                region_sar=utils.slice_spl_to_sar(bbox, orig_seg.shape),
+                region_sar=region_sar,
             )
 
         self.extractor.add_preprocess(
