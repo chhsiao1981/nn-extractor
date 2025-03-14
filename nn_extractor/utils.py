@@ -3,7 +3,7 @@
 import os
 from typing import Optional
 
-from numpy import copy
+import copy
 
 from nn_extractor import cfg
 
