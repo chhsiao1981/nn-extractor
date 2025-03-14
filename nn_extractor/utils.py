@@ -39,8 +39,8 @@ def slice_inverse(the_slice: slice | int, the_dim: int) -> slice | int:
     if isinstance(the_slice, int):
         return the_dim - 1 - the_slice
 
-    the_stop = None if the_slice.start is None else the_dim - 1 - the_slice.start
-    the_start = None if the_slice.stop is None else the_dim - 1 - the_slice.stop
+    the_stop = None if the_slice.start is None else the_dim - the_slice.start
+    the_start = None if the_slice.stop is None else the_dim - the_slice.stop
 
     the_step = the_slice.step
 
