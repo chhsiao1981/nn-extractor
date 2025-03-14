@@ -16,7 +16,7 @@ def ensure_dir(filename: str):
 
 
 def slice_spl_to_sar(the_slice: list[slice], the_shape: tuple[int]):
-    the_slice = sanitize_slice(the_slice)
+    the_slice = [sanitize_slice(each) for each in the_slice]
     if len(the_shape) >= 3:
         the_slice_p = the_slice[-2]
         the_slice_l = the_slice[-1]
