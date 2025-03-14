@@ -144,8 +144,6 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 extractor=self.extractor,
             )
             export_prediction.extractor_add_postprocess(
-                predicted_array_or_file=predicted_logits,
-                properties_dict=properties_dict,
                 plans_manager=self.plans_manager,
                 save_probabilities=save_or_return_probabilities,
                 ret=ret,

@@ -166,8 +166,6 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
 
     # extractor add postprocess
     extractor_add_postprocess(
-        predicted_array_or_file,
-        properties_dict,
         plans_manager,
         save_probabilities,
         ret,
@@ -204,8 +202,6 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
 
 
 def extractor_add_postprocess(
-    predicted_array_or_file: np.ndarray | torch.Tensor,
-    properties_dict: dict,
     plans_manager: PlansManager,
     save_probabilities: bool,
     ret: np.ndarray | tuple[np.ndarray, np.ndarray | Any],
@@ -223,9 +219,8 @@ def extractor_add_postprocess(
         segmentation = ret
 
     extractor.add_postprocess(
-        name='correct shape',
+        name='correct-shape',
         data={
-            'predicted_logits': predicted_array_or_file,
             'segmentation': segmentation,
             'probability': probability,
             'transpose_forward': plans_manager.transpose_forward,
