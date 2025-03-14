@@ -84,7 +84,8 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
         'seg': Pad(
             img=segmentation_reverted_cropping,
             slicer_revert_padding_sar=utils.slice_spl_to_sar(
-                properties_dict['bbox_used_for_cropping']
+                properties_dict['bbox_used_for_cropping'],
+                segmentation_reverted_cropping.shape,
             ),
         )
     }
@@ -104,7 +105,8 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
         revert_cropping_data['prob'] = Pad(
             img=predicted_probabilities,
             slicer_revert_padding_sar=utils.slice_spl_to_sar(
-                properties_dict['bbox_used_for_cropping']
+                properties_dict['bbox_used_for_cropping'],
+                predicted_probabilities.shape,
             ),
         )
 

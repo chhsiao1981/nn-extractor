@@ -282,9 +282,9 @@ class nnUNetPredictor(baseNNUNetPredictor):
         predicted_logits = n_predictions = prediction = gaussian = workon = None
         results_device = self.device if do_on_device else torch.device('cpu')
 
-        def producer(d, slh, q):
+        def producer(d: torch.Tensor, slh: list[slice], q: Queue):
             for s in slh:
-                q.put((torch.clone(d[s][None], memory_format=torch.contiguous_format).to(self.device), s))  # noqa
+                q.put((torch.clone(d[s][None], memory_format=torch.contiguous_format).to(self.device), d.shape, s))  # noqa
             q.put('end')
 
         try:
@@ -322,7 +322,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     if item == 'end':
                         queue.task_done()
                         break
-                    workon, sl = item
+                    workon, orig_shape, sl = item
 
                     # sub-extractor add workon and slicer as inputs.
                     slicer_idx = pbar.n
@@ -330,7 +330,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     sub_extractor.add_inputs(
                         name=f'workon-{slicer_idx}',
                         data={
-                            'workon': Crop(img=workon, region_sar=utils.slice_spl_to_sar(sl)),
+                            'workon': Crop(img=workon, region_sar=utils.slice_spl_to_sar(sl, orig_shape)),
                         },
                     )
 
@@ -354,7 +354,8 @@ class nnUNetPredictor(baseNNUNetPredictor):
                             'gaussian': gaussian,
                             'predicted_logits': Pad(
                                 img=predicted_logits,
-                                slicer_revert_padding_sar=utils.slice_spl_to_sar(sl),
+                                slicer_revert_padding_sar=utils.slice_spl_to_sar(
+                                    sl, predicted_logits.shape),
                             ),
                             'n_predictions': n_predictions,
                         },
@@ -418,7 +419,8 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 data={
                     'img': Pad(
                         img=data,
-                        slicer_revert_padding_sar=utils.slice_spl_to_sar(slicer_revert_padding),
+                        slicer_revert_padding_sar=utils.slice_spl_to_sar(
+                            slicer_revert_padding, data.shape),
                     ),
                 },
             )
@@ -458,6 +460,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
             empty_cache(self.device)
             # revert padding
             the_slice = (slice(None), *slicer_revert_padding[1:])
+            orig_predicted_logits = predicted_logits
             predicted_logits = predicted_logits[the_slice]
 
             # self.extractor revert padding.
@@ -466,7 +469,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 data={
                     'predicted_logits': Crop(
                         img=predicted_logits,
-                        region_sar=utils.slice_spl_to_sar(the_slice),
+                        region_sar=utils.slice_spl_to_sar(the_slice, orig_predicted_logits.shape),
                     ),
                 },
             )

@@ -79,6 +79,8 @@ class DefaultPreprocessor(orig_DefaultPreprocessor):
         shape_before_cropping = data.shape[1:]
         properties['shape_before_cropping'] = shape_before_cropping
         # this command will generate a segmentation. This is important because of the nonzero mask which we may need
+        orig_data = data
+        orig_seg = seg
         data, seg, bbox = crop_to_nonzero(data, seg)
         properties['bbox_used_for_cropping'] = bbox
         # print(data.shape, seg.shape)
@@ -86,11 +88,14 @@ class DefaultPreprocessor(orig_DefaultPreprocessor):
 
         # self.extractor: add crop data in preprocess.
         crop_data = {
-            'img': Crop(img=data, region_sar=utils.slice_spl_to_sar(bbox)),
+            'img': Crop(img=data, region_sar=utils.slice_spl_to_sar(bbox, orig_data.shape)),
             'props': properties,
         }
         if has_seg:
-            crop_data['seg'] = Crop(img=seg, region_sar=utils.slice_spl_to_sar(bbox))
+            crop_data['seg'] = Crop(
+                img=seg,
+                region_sar=utils.slice_spl_to_sar(bbox, orig_seg.shape),
+            )
 
         self.extractor.add_preprocess(
             name=f'crop-img',

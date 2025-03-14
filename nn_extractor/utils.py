@@ -2,6 +2,8 @@
 
 import os
 
+from nn_extractor import cfg
+
 
 def ensure_dir(filename: str):
     the_dirname = os.path.dirname(filename)
@@ -21,7 +23,10 @@ def slice_spl_to_sar(the_slice: list[slice], the_shape: tuple[int]):
         new_slice = [each for each in the_slice]
         new_slice[-2] = the_slice_a
         new_slice[-1] = the_slice_r
+        cfg.logger.info(f'slice_spl_to_sar: the_slice: {the_slice} the_shape: {the_shape} new_slice: {new_slice}')  # noqa
         return new_slice
+    else:
+        cfg.logger.info(f'slice_spl_to_sar: the_shape < 3: the_slice: {the_slice} the_shape: {the_shape}')  # noqa
 
     return the_slice
 
