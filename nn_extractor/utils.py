@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import os
+from typing import Optional
+
+from numpy import copy
 
 from nn_extractor import cfg
 
@@ -13,6 +16,7 @@ def ensure_dir(filename: str):
 
 
 def slice_spl_to_sar(the_slice: list[slice], the_shape: tuple[int]):
+    the_slice = sanitize_slice(the_slice)
     if len(the_shape) >= 3:
         the_slice_p = the_slice[-2]
         the_slice_l = the_slice[-1]
@@ -41,3 +45,24 @@ def slice_inverse(the_slice: slice | int, the_dim: int) -> slice | int:
     the_step = the_slice.step
 
     return slice(the_start, the_stop, the_step)
+
+
+def sanitize_slice(
+    the_slice: int | slice | tuple[Optional[int], Optional[int], Optional[int]] | list[Optional[int]]  # noqa
+) -> Optional[slice]:
+    if isinstance(the_slice, int):
+        # retaining the result as int as indication to reduce dimension.
+        return the_slice
+    if isinstance(the_slice, slice):
+        return the_slice
+
+    if len(the_slice) > 3:
+        raise Exception(f'sanitize_slice: invalid slice: the_slice: {the_slice}')
+
+    new_slice = copy.deepcopy(the_slice)
+    if len(new_slice) == 1:
+        new_slice += [None, None]
+    elif len(the_slice) == 2:
+        new_slice += [None]
+
+    return slice(new_slice[0], new_slice[1], new_slice[2])

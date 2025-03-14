@@ -6,7 +6,7 @@ from nn_extractor import cfg, nntensor
 from nn_extractor.ops.base_op import BaseOp
 from nn_extractor.ops.op_item import OpItem
 from nn_extractor.ops.op_type import OpType
-from nn_extractor.ops import utils
+from nn_extractor import utils
 from nn_extractor.types import NNTensor
 
 
