@@ -228,14 +228,17 @@ class nnUNetPredictor(baseNNUNetPredictor):
             axes_combinations = [
                 c for i in range(len(mirror_axes)) for c in itertools.combinations(mirror_axes, i + 1)  # noqa
             ]
-            for idx, axes in enumerate(axes_combinations):
+            for idx, axes_sar in enumerate(axes_combinations):
                 # add each_flipped for sub-extractor.
-                each_flipped_x = torch.flip(x, axes)
+                each_flipped_x = torch.flip(x, axes_sar)
 
                 # sub-extractor add-preprocess
                 sub_extractor.add_preprocess(
                     name=f'mirror-flip-{idx}',
-                    data={'flipped': Flip(img=each_flipped_x, axes_sar=axes)},
+                    data={
+                        'flipped': Flip(img=each_flipped_x, axes_sar=axes_sar),
+                        'axes': axes_sar,
+                    },
                 )
 
                 # add each-prediction for sub-extractor
@@ -244,7 +247,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 # sub-extractor forward snapshot
                 sub_extractor.forward_snapshot()
 
-                unflipped_prediction = torch.flip(each_prediction, axes)
+                unflipped_prediction = torch.flip(each_prediction, axes_sar)
                 prediction += unflipped_prediction
 
                 # sub-extractor add mirroring postrocess: unflip
@@ -252,7 +255,8 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     name=f'mirror-unflip-{idx}',
                     data={
                         'each_prediction': each_prediction,
-                        'unflipped': Flip(img=unflipped_prediction, axes_sar=axes),
+                        'unflipped': Flip(img=unflipped_prediction, axes_sar=axes_sar),
+                        'axes': axes_sar,
                         'prediction': prediction,
                     },
                 )
