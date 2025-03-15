@@ -296,6 +296,9 @@ class Item(object):
             f.write(serialized_str)
 
     def save_to_file_pk(self: Self, seq_dir: str):
+        if not cfg.config['is_save_to_file_pk']:
+            return
+
         if item_type.is_skip_save_file_type(self.the_type):
             return
 

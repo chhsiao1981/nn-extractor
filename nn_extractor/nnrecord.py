@@ -204,6 +204,7 @@ class NNRecord(object):
             return
         elif self.the_type == NNRecordType.ARRAY:
             self.save_to_file_pb(seq_dir)
+            self.save_to_file_pk(seq_dir)
         elif self.the_type == NNRecordType.OP_ITEM:
             self.value.save_to_file(seq_dir)
 
@@ -223,6 +224,9 @@ class NNRecord(object):
             f.write(serialized_str)
 
     def save_to_file_pk(self: Self, seq_dir: str):
+        if not cfg.config['is_save_to_file_pk']:
+            return
+
         filename = f'{self.data_id}.pb'
 
         out_filename = os.sep.join([cfg.config['output_dir'], seq_dir, filename])
