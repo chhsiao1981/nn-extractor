@@ -3,6 +3,7 @@
 import base64
 from dataclasses import dataclass
 import os
+import pickle
 from typing import Any, Optional, Self
 
 from nn_extractor import cfg, nnextractor_pb2, nntensor, utils
@@ -80,6 +81,10 @@ class OpItem(object):
         )
 
     def save_to_file(self: Self, seq_dir: str):
+        self.save_to_file_pb(seq_dir)
+        self.save_to_file_pk(seq_dir)
+
+    def save_to_file_pb(self: Self, seq_dir: str):
         serialized = self.serialize_pb()
 
         filename = f"{self.data_id}.pb"
@@ -93,6 +98,23 @@ class OpItem(object):
             serialized_bytes = serialized.SerializeToString()
             serialized_str = base64.b64encode(serialized_bytes)
             f.write(serialized_str)
+
+    def save_to_file_pk(self: Self, seq_dir: str):
+        if not cfg.config['is_save_to_file_pk']:
+            return
+
+        filename = f"{self.data_id}.pk"
+
+        out_filename = os.sep.join([cfg.config['output_dir'], seq_dir, filename])
+        utils.ensure_dir(out_filename)
+        with open(out_filename, 'wb') as f:
+            pickle.dump({
+                'name': self.name,
+                'op_type': self.op_type,
+                'tensor': self.tensor,
+                'op_params': self.op_params,
+                'data_id': self.data_id,
+            }, f)
 
     def meta(self: Self):
         meta_tensor = nntensor.meta_nntensor(self.tensor)

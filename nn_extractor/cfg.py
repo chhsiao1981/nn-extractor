@@ -29,7 +29,7 @@ class Config(TypedDict):
 
     is_nnnode_record_inputs: NotRequired[bool]
 
-    version: NotRequired[str]
+    is_save_to_file_pk: NotRequired[bool]
 
     # server
     server: ServerConfig
@@ -44,8 +44,7 @@ config: Config = {
 
     'is_nnnode_record_inputs': False,
 
-    'is_profile': False,
-
+    'is_save_to_file_pk': False,
 
     'server': {
         'root_dir': '',

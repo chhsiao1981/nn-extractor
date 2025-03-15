@@ -1,18 +1,132 @@
 from typing import Any, Optional, Union
 
-from nn_extractor import nii
+import copy
+
+from nn_extractor import nii, utils
 from nn_extractor.nii import NII
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.pad import Pad
+from nn_extractor.ops.spacing import Spacing
 from nn_extractor.types import NNTensor
 import numpy as np
 import torch
+from acvl_utils.cropping_and_padding.bounding_boxes import bounding_box_to_slice, insert_crop_into_image
 from batchgenerators.utilities.file_and_folder_operations import load_json, save_pickle
 
 from nnunetv2.configuration import default_num_processes
+from nnunetv2.utilities.label_handling.label_handling import LabelManager
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, ConfigurationManager
 
 from nnunetv2.inference.export_prediction import convert_predicted_logits_to_segmentation_with_correct_shape  # noqa
+
+
+def convert_predicted_logits_to_segmentation_with_correct_shape(
+    predicted_logits: Union[torch.Tensor, np.ndarray],
+    plans_manager: PlansManager,
+    configuration_manager: ConfigurationManager,
+    label_manager: LabelManager,
+    properties_dict: dict,
+    return_probabilities: bool = False,
+    num_threads_torch: int = default_num_processes,
+
+    extractor: Optional[NNExtractor] = None,
+):
+    old_threads = torch.get_num_threads()
+    torch.set_num_threads(num_threads_torch)
+
+    # resample to original shape
+    spacing_transposed = [properties_dict['spacing'][i] for i in plans_manager.transpose_forward]
+    current_spacing = configuration_manager.spacing if \
+        len(configuration_manager.spacing) == \
+        len(properties_dict['shape_after_cropping_and_before_resampling']) else \
+        [spacing_transposed[0], *configuration_manager.spacing]
+
+    current_shape = predicted_logits.shape
+    orig_spacing = [properties_dict['spacing'][i] for i in plans_manager.transpose_forward]
+    predicted_logits = configuration_manager.resampling_fn_probabilities(
+        predicted_logits,
+        properties_dict['shape_after_cropping_and_before_resampling'],
+        current_spacing,
+        orig_spacing)
+
+    orig_spacing_ras = copy.deepcopy(orig_spacing)
+    orig_spacing_ras.reverse()
+    spacing_data = {
+        'img': Spacing(img=predicted_logits, spacing_ras=orig_spacing_ras),
+        'current_spacing_ras': current_spacing,
+        'current_shape_sar': current_shape,
+    }
+    extractor.add_postprocess(name='un-spacing', data=spacing_data)
+
+    # return value of resampling_fn_probabilities can be ndarray or Tensor but that does not matter because
+    # apply_inference_nonlin will convert to torch
+    if not return_probabilities:
+        # this has a faster computation path becasue we can skip the softmax in regular (not region based) trainig
+        segmentation = label_manager.convert_logits_to_segmentation(predicted_logits)
+    else:
+        predicted_probabilities = label_manager.apply_inference_nonlin(predicted_logits)
+        segmentation = label_manager.convert_probabilities_to_segmentation(predicted_probabilities)
+    del predicted_logits
+
+    # put segmentation in bbox (revert cropping)
+    segmentation_reverted_cropping = np.zeros(properties_dict['shape_before_cropping'],
+                                              dtype=np.uint8 if len(label_manager.foreground_labels) < 255 else np.uint16)
+    segmentation_reverted_cropping = insert_crop_into_image(
+        segmentation_reverted_cropping, segmentation, properties_dict['bbox_used_for_cropping'])
+    del segmentation
+
+    # segmentation may be torch.Tensor but we continue with numpy
+    if isinstance(segmentation_reverted_cropping, torch.Tensor):
+        segmentation_reverted_cropping = segmentation_reverted_cropping.cpu().numpy()
+
+    # extractor: revert cropping
+    slicer_revert_padding_sar = utils.slice_spl_to_sar(
+        properties_dict['bbox_used_for_cropping'],
+        segmentation_reverted_cropping.shape,
+    )
+    revert_cropping_data = {
+        'seg': Pad(
+            img=segmentation_reverted_cropping,
+            slicer_revert_padding_sar=slicer_revert_padding_sar,
+        ),
+        'slicer_revert_padding_sar': slicer_revert_padding_sar,
+    }
+
+    # revert transpose
+    segmentation_reverted_cropping = segmentation_reverted_cropping.transpose(
+        plans_manager.transpose_backward)
+    if return_probabilities:
+        # revert cropping
+        predicted_probabilities = label_manager.revert_cropping_on_probabilities(
+            predicted_probabilities,
+            properties_dict['bbox_used_for_cropping'],
+            properties_dict['shape_before_cropping'])
+        predicted_probabilities = predicted_probabilities.cpu().numpy()
+
+        # extractor: revert cropping
+        revert_cropping_data['prob'] = Pad(
+            img=predicted_probabilities,
+            slicer_revert_padding_sar=utils.slice_spl_to_sar(
+                properties_dict['bbox_used_for_cropping'],
+                predicted_probabilities.shape,
+            ),
+        )
+
+        # revert transpose
+        predicted_probabilities = predicted_probabilities.transpose([0] + [i + 1 for i in
+                                                                           plans_manager.transpose_backward])
+
+        # extractor: revert cropping
+        extractor.add_postprocess(name='un-crop', data=revert_cropping_data)
+
+        torch.set_num_threads(old_threads)
+        return segmentation_reverted_cropping, predicted_probabilities
+    else:
+        # extractor: revert cropping
+        extractor.add_postprocess(name='un-crop', data=revert_cropping_data)
+
+        torch.set_num_threads(old_threads)
+        return segmentation_reverted_cropping
 
 
 def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, torch.Tensor], properties_dict: dict,  # noqa
@@ -39,14 +153,19 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
 
     label_manager = plans_manager.get_label_manager(dataset_json_dict_or_file)
     ret = convert_predicted_logits_to_segmentation_with_correct_shape(
-        predicted_array_or_file, plans_manager, configuration_manager, label_manager, properties_dict,  # noqa
-        return_probabilities=save_probabilities, num_threads_torch=num_threads_torch
+        predicted_array_or_file,
+        plans_manager,
+        configuration_manager,
+        label_manager,
+        properties_dict,
+        return_probabilities=save_probabilities,
+        num_threads_torch=num_threads_torch,
+
+        extractor=extractor,
     )
 
     # extractor add postprocess
     extractor_add_postprocess(
-        predicted_array_or_file,
-        properties_dict,
         plans_manager,
         save_probabilities,
         ret,
@@ -83,8 +202,6 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
 
 
 def extractor_add_postprocess(
-    predicted_array_or_file: np.ndarray | torch.Tensor,
-    properties_dict: dict,
     plans_manager: PlansManager,
     save_probabilities: bool,
     ret: np.ndarray | tuple[np.ndarray, np.ndarray | Any],
@@ -101,24 +218,14 @@ def extractor_add_postprocess(
     else:
         segmentation = ret
 
-    slicer_revert_padding = properties_dict['bbox_used_for_cropping']
-    pad_segmentation = Pad(img=segmentation, slicer_revert_padding=slicer_revert_padding)
-    pad_probability = None
-    if probability is not None:
-        pad_probability = Pad(img=probability, slicer_revert_padding=slicer_revert_padding)
-
     extractor.add_postprocess(
-            name='correct-shape',
-            data={
-                'predicted_logits': predicted_array_or_file,
-                'segmentation': pad_segmentation,
-                'probability': pad_probability,
-                'spacing': properties_dict['spacing'],
-                'transpose_forward': plans_manager.transpose_forward,
-                'shape_after_cropping_and_before_resampling': properties_dict['shape_after_cropping_and_before_resampling'],  # noqa
-                'shape_before_cropping': properties_dict['shape_before_cropping'],
-                'bbox_used_for_cropping': properties_dict['bbox_used_for_cropping'],
-            })
+        name='correct-shape',
+        data={
+            'segmentation': segmentation,
+            'probability': probability,
+            'transpose_forward': plans_manager.transpose_forward,
+        }
+    )
 
 
 def extractor_add_outputs(

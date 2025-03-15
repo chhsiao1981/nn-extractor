@@ -23,11 +23,11 @@ class Origin(BaseOp):
     origin, the length need be the same as img.ndim.
         in RAS+ coordinate.
     '''
-    origin: list[Primitive]
+    origin_ras: list[Primitive]
 
     def integrate(self: Self, name: str) -> Optional[OpItem]:
         img = self.img
-        origin = self.origin
+        origin_ras = self.origin_ras
 
         if not nntensor.isinstance_nntensor(img):
             cfg.logger.warning(f'origin.integrate: img is not nntensor: {type(img)}')
@@ -37,5 +37,5 @@ class Origin(BaseOp):
             name=name,
             op_type=OpType.CROP,
             tensor=img,
-            op_params=origin,
+            op_params=origin_ras,
         )

@@ -3,10 +3,10 @@
 import unittest
 import logging  # noqa
 
-from nn_extractor.ops import utils  # noqa
+from nn_extractor.examples import data_iterators  # noqa
 
 
-class TestUtils(unittest.TestCase):
+class TestDataIterators(unittest.TestCase):
 
     def setUp(self):
         pass

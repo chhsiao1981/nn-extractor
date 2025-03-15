@@ -25,17 +25,17 @@ class Spacing(BaseOp):
 
     spacing, the length need be the same as img.ndim.
     '''
-    spacing: Optional[list[Primitive]] = None
+    spacing_ras: Optional[list[Primitive]] = None
 
     def integrate(self: Self, name: str) -> Optional[OpItem]:
         img = self.img
-        spacing = self.spacing
+        spacing_ras = self.spacing_ras
 
         if not nntensor.isinstance_nntensor(img):
             cfg.logger.warning(f'spacing.integrate: img is not nntensor: {type(img)}')
             return None
 
-        if spacing is None:
+        if spacing_ras is None:
             return OpItem(
                 name=name,
                 op_type=OpType.SPACING,
@@ -45,7 +45,7 @@ class Spacing(BaseOp):
 
         return OpItem(
             name=name,
-            op_type=OpType.CROP,
+            op_type=OpType.SPACING,
             tensor=img,
-            op_params=spacing,
+            op_params=spacing_ras,
         )
