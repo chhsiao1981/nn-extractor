@@ -227,7 +227,7 @@ class NNRecord(object):
         if not cfg.config['is_save_to_file_pk']:
             return
 
-        filename = f'{self.data_id}.pb'
+        filename = f'{self.data_id}.pk'
 
         out_filename = os.sep.join([cfg.config['output_dir'], seq_dir, filename])
 
