@@ -21,7 +21,7 @@ dependencies = [
 authors = [
     {name = 'Chuan-Heng Hsiao', email = 'hsiao.chuanheng@gmail.com'},
 ]
-description = ''
+description = 'neural network model extractor'
 readme = 'README.md'
 license = {file = 'LICENSE.txt'}
 keywords = [
