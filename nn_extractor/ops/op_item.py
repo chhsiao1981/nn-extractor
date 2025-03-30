@@ -21,7 +21,7 @@ class OpItem(object):
 
     data_id: Optional[str] = None
 
-    def __init__(self: Self, name: str, op_type: OpType, tensor: NNTensor, op_params: Any):
+    def __init__(self: Self, name: str, op_type: OpType, tensor: NNTensor, op_params: Any = None):
         self.name = name
         self.op_type = op_type
         self.tensor = tensor

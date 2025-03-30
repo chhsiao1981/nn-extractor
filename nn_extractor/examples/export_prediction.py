@@ -6,6 +6,7 @@ from nn_extractor import nii, utils
 from nn_extractor.nii import NII
 from nn_extractor.nnextractor import NNExtractor
 from nn_extractor.ops.pad import Pad
+from nn_extractor.ops.segmentation import Segmentation
 from nn_extractor.ops.spacing import Spacing
 from nn_extractor.types import NNTensor
 import numpy as np
@@ -56,7 +57,8 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
         'current_spacing_ras': current_spacing,
         'current_shape_sar': current_shape,
     }
-    extractor.add_postprocess(name='un-spacing', data=spacing_data)
+    if extractor is not None:
+        extractor.add_postprocess(name='un-spacing', data=spacing_data)
 
     # return value of resampling_fn_probabilities can be ndarray or Tensor but that does not matter because
     # apply_inference_nonlin will convert to torch
@@ -117,13 +119,15 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
                                                                            plans_manager.transpose_backward])
 
         # extractor: revert cropping
-        extractor.add_postprocess(name='un-crop', data=revert_cropping_data)
+        if extractor is not None:
+            extractor.add_postprocess(name='un-crop', data=revert_cropping_data)
 
         torch.set_num_threads(old_threads)
         return segmentation_reverted_cropping, predicted_probabilities
     else:
         # extractor: revert cropping
-        extractor.add_postprocess(name='un-crop', data=revert_cropping_data)
+        if extractor is not None:
+            extractor.add_postprocess(name='un-crop', data=revert_cropping_data)
 
         torch.set_num_threads(old_threads)
         return segmentation_reverted_cropping
@@ -250,11 +254,11 @@ def extractor_add_outputs(
     if label_image is not None and label_image_properties is not None:
         label_nii = nii.from_sitk_image_props(label_image, label_image_properties)
 
-    outputs_data = {'segmentation': segmentation}
+    outputs_data = {'segmentation': Segmentation(img=segmentation)}
     if probability is not None:
         outputs_data['probability'] = probability
     if label_nii is not None:
-        outputs_data['ground_truth'] = label_nii
+        outputs_data['ground_truth'] = Segmentation(img=label_nii)
 
     extractor.add_outputs(
         data=outputs_data,

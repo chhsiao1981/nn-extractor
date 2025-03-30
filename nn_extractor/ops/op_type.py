@@ -31,19 +31,10 @@ class OpType(Enum):
 
     GEO_IDENTITY = nnextractor_pb2.OpType.O_GEO_IDENTITY
 
+    SEGMENTATION = nnextractor_pb2.OpType.O_SEGMENTATION
+
     def __int__(self) -> int:
         return self.value
 
     def __str__(self) -> str:
         return self.name.lower()
-
-
-OP_TYPE_FURTHER_INTEGRATION_SET = set([
-    OpType.CROP,
-    OpType.PAD,
-    OpType.FLIP,
-    OpType.ORIGIN,
-    OpType.SPACING,
-    OpType.DIRECTION,
-    OpType.AFFINE,
-])
