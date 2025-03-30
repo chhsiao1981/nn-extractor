@@ -29,6 +29,8 @@ from nnunetv2.utilities.utils import create_lists_from_splitted_dataset_folder
 
 from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor as baseNNUNetPredictor
 
+from nn_extractor.ops.segmentation import Segmentation
+
 from . import export_prediction
 from . data_iterators import PreprocessAdapterFromNpy
 
@@ -111,6 +113,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
         predicted_logits = self.predict_logits_from_preprocessed_data(
             data=dct['data'],
             nnextractor_name=nnextractor_name,
+            dct=dct,
         ).cpu()
 
         if self.verbose:
@@ -135,7 +138,8 @@ class nnUNetPredictor(baseNNUNetPredictor):
 
         else:
             ret = export_prediction.convert_predicted_logits_to_segmentation_with_correct_shape(
-                predicted_logits, self.plans_manager,
+                predicted_logits,
+                self.plans_manager,
                 self.configuration_manager,
                 self.label_manager,
                 dct['data_properties'],
@@ -168,7 +172,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 return ret
 
     @torch.inference_mode()
-    def predict_logits_from_preprocessed_data(self, data: torch.Tensor, nnextractor_name: str) -> torch.Tensor:  # noqa
+    def predict_logits_from_preprocessed_data(self, data: torch.Tensor, nnextractor_name: str, dct: dict) -> torch.Tensor:  # noqa
         """
         IMPORTANT! IF YOU ARE RUNNING THE CASCADE, THE SEGMENTATION FROM THE PREVIOUS STAGE MUST ALREADY BE STACKED ON
         TOP OF THE IMAGE AS ONE-HOT REPRESENTATION! SEE PreprocessAdapter ON HOW THIS SHOULD BE DONE!
@@ -203,11 +207,21 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 )
             else:
                 each_prediction = self.predict_sliding_window_return_logits(data, prompt).to('cpu')
+                each_segmentation = export_prediction.convert_predicted_logits_to_segmentation_with_correct_shape(
+                    each_prediction,
+                    self.plans_manager,
+                    self.configuration_manager,
+                    self.label_manager,
+                    dct['data_properties'],
+                    return_probabilities=False,
+                    extractor=None,
+                )
                 prediction += each_prediction
                 self.extractor.add_postprocess(
                     name='each-fold-predict',
                     data={
                         'each_prediction': each_prediction,
+                        'each_segmentation': Segmentation(each_segmentation),
                         'prediction': prediction,
                         'idx': idx,
                     },
