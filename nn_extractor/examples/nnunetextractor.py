@@ -194,11 +194,37 @@ class nnUNetPredictor(baseNNUNetPredictor):
             prompt = f'{nnextractor_name}-{idx}'
             if prediction is None:
                 prediction = self.predict_sliding_window_return_logits(data, prompt).to('cpu')
+                self.extractor.add_postprocess(
+                    name='each-fold-predict',
+                    data={
+                        'prediction': prediction,
+                        'idx': idx,
+                    },
+                )
             else:
-                prediction += self.predict_sliding_window_return_logits(data, prompt).to('cpu')
+                each_prediction = self.predict_sliding_window_return_logits(data, prompt).to('cpu')
+                prediction += each_prediction
+                self.extractor.add_postprocess(
+                    name='each-fold-predict',
+                    data={
+                        'each_prediction': each_prediction,
+                        'prediction': prediction,
+                        'idx': idx,
+                    },
+                )
 
         if len(self.list_of_parameters) > 1:
-            prediction /= len(self.list_of_parameters)
+            orig_prediction = prediction
+            prediction = orig_prediction / len(self.list_of_parameters)
+
+            self.extractor.add_postprocess(
+                name='fold-normalize',
+                data={
+                    'orig_prediction': orig_prediction,
+                    'prediction': prediction,
+                    'list_of_parameters': self.list_of_parameters,
+                },
+            )
 
         if self.verbose: print('Prediction done')  # fmt: off  # noqa
         torch.set_num_threads(n_threads)
