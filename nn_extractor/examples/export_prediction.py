@@ -70,6 +70,14 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(
         segmentation = label_manager.convert_probabilities_to_segmentation(predicted_probabilities)
     del predicted_logits
 
+    seg_data = {
+        'seg': segmentation,
+    }
+    if return_probabilities:
+        seg_data['prob'] = predicted_probabilities
+    if extractor is not None:
+        extractor.add_postprocess(name='seg', data=seg_data)
+
     # put segmentation in bbox (revert cropping)
     segmentation_reverted_cropping = np.zeros(properties_dict['shape_before_cropping'],
                                               dtype=np.uint8 if len(label_manager.foreground_labels) < 255 else np.uint16)
@@ -225,7 +233,7 @@ def extractor_add_postprocess(
     extractor.add_postprocess(
         name='correct-shape',
         data={
-            'segmentation': segmentation,
+            'segmentation': Segmentation(img=segmentation),
             'probability': probability,
             'transpose_forward': plans_manager.transpose_forward,
         }
@@ -258,7 +266,7 @@ def extractor_add_outputs(
     if probability is not None:
         outputs_data['probability'] = probability
     if label_nii is not None:
-        outputs_data['ground_truth'] = Segmentation(img=label_nii)
+        outputs_data['ground_truth'] = Segmentation(img=label_nii.tensor)
 
     extractor.add_outputs(
         data=outputs_data,

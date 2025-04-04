@@ -10,7 +10,7 @@ fi
 nnUNet_rootdir=$1
 nnUNet_train_dataset=$2
 nnUNet_config=$3
-nnUNet_fold=$4
+nnUNet_fold=`echo "$4"|sed 's/,/ /g'`
 input_dir=$5
 nnUNet_output_dir=$6
 config=$7
