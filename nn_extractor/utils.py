@@ -17,6 +17,9 @@ def ensure_dir(filename: str):
 
 def slice_spl_to_sar(the_slice: list[slice], the_shape: tuple[int]):
     the_slice = [sanitize_slice(each) for each in the_slice]
+    return the_slice
+
+    '''
     if len(the_shape) >= 3:
         the_slice_p = the_slice[-2]
         the_slice_l = the_slice[-1]
@@ -33,6 +36,7 @@ def slice_spl_to_sar(the_slice: list[slice], the_shape: tuple[int]):
         cfg.logger.info(f'slice_spl_to_sar: the_shape < 3: the_slice: {the_slice} the_shape: {the_shape}')  # noqa
 
     return the_slice
+    '''
 
 
 def slice_inverse(the_slice: slice | int, the_dim: int) -> slice | int:
