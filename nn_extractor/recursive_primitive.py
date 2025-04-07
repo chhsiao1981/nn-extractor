@@ -145,9 +145,9 @@ class RecursivePrimitive(object):
                 for each in recursive_primitive_pb.slice
             ]
             value = slice(
-                start=deserialized_slice[0],
-                stop=deserialized_slice[1],
-                step=deserialized_slice[2],
+                deserialized_slice[0],
+                deserialized_slice[1],
+                deserialized_slice[2],
             )
             return RecursivePrimitive(the_type=RecursivePrimitiveType.SLICE, value=value)
         else:
