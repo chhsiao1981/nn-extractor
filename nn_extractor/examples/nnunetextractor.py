@@ -326,7 +326,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
 
         def producer(d: torch.Tensor, slh: list[slice], q: Queue):
             for s in slh:
-                q.put((torch.clone(d[s][None], memory_format=torch.contiguous_format).to(self.device), d.shape, s))  # noqa
+                q.put((torch.clone(d[s][None], memory_format=torch.contiguous_format).to(self.device), s))  # noqa
             q.put('end')
 
         try:
@@ -364,12 +364,12 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     if item == 'end':
                         queue.task_done()
                         break
-                    workon, orig_shape, sl = item
+                    workon, sl = item
 
                     # sub-extractor add workon and slicer as inputs.
                     slicer_idx = pbar.n
                     sub_extractor = NNExtractor(f'{prompt}-workon-{slicer_idx}')
-                    region_sar = utils.slice_spl_to_sar(sl, orig_shape)
+                    region_sar = utils.sanitize_slice_sar(sl)
                     sub_extractor.add_inputs(
                         name=f'workon-{slicer_idx}',
                         data={
@@ -390,7 +390,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                     n_predictions[sl[1:]] += gaussian
 
                     # self.extractor add postprocess for predicted-logits and n-predictions
-                    slicer_revert_padding_sar = utils.slice_spl_to_sar(sl, predicted_logits.shape)
+                    slicer_revert_padding_sar = utils.sanitize_slice_sar(sl)
                     self.extractor.add_postprocess(
                         name=f'workon-{slicer_idx}',
                         data={
@@ -459,7 +459,7 @@ class nnUNetPredictor(baseNNUNetPredictor):
                 None)
 
             # extractor add preprocess: Pad
-            slicer_revert_padding_sar = utils.slice_spl_to_sar(slicer_revert_padding, data.shape)
+            slicer_revert_padding_sar = utils.sanitize_slice_sar(slicer_revert_padding)
             self.extractor.add_preprocess(
                 name=f'{prompt}-pad',
                 data={
@@ -506,11 +506,10 @@ class nnUNetPredictor(baseNNUNetPredictor):
             empty_cache(self.device)
             # revert padding
             the_slice = (slice(None), *slicer_revert_padding[1:])
-            orig_predicted_logits = predicted_logits
             predicted_logits = predicted_logits[the_slice]
 
             # self.extractor revert padding.
-            region_sar = utils.slice_spl_to_sar(the_slice, orig_predicted_logits.shape)
+            region_sar = utils.sanitize_slice_sar(the_slice)
             self.extractor.add_postprocess(
                 name='revert-padding',
                 data={
