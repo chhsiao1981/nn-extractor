@@ -48,7 +48,17 @@ def get_bytes(filename: str):
 
 
 def get_value(data_bytes: bytes, r: int, a: int, s: int, dims_ras: list[int], data_type: int):
+    '''
+    NIFTI is column-major
+
+    https://afni.nimh.nih.gov/pub/dist/doc/nifti/nifti1_rationale.html#:~:text=The%20NIfTI%2D1%20single%20file,where%20the%20image%20data%20starts.
+    Data Dimensionality
+
+    In terms of the actual image data storage, this makes no difference, since the data at the 5D index (a,b,c,d,e) is to be stored at byte offset
+    (a+b*dim[1]+c*dim[1]*dim[2]+d*dim[1]*dim[2]*dim[3]+e*dim[1]*dim[2]*dim[3]*dim[4])*bitpix/8
+
+    '''
     byte_length = _BYTE_LENGTH_MAP[data_type]
     pack_str = _PACK_MAP[data_type]
-    the_idx = (s * dims_ras[0] * dims_ras[1] + a * dims_ras[0] + r) * byte_length
-    return struct.unpack(pack_str, data_bytes[the_idx:(the_idx + the_idx)])
+    the_idx = (r + a * dims_ras[0] + s * dims_ras[0] * dims_ras[1]) * byte_length
+    return struct.unpack(pack_str, data_bytes[the_idx:(the_idx + byte_length)])
